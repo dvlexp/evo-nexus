@@ -192,7 +192,17 @@ def register_websocket_proxy(sock) -> None:
             while not stop.is_set():
                 msg = client_ws.receive(timeout=30)
                 if msg is None:
-                    break
+                    # simple-websocket returns None on receive() timeout, not
+                    # on disconnect (disconnects raise ConnectionClosed). An
+                    # idle chat session — e.g. user with the tab in the
+                    # background where browsers throttle the 25s ping
+                    # setInterval below 1/min — would otherwise drop the WS
+                    # here, leaving the frontend's wsRef pointing at a CLOSED
+                    # socket. Subsequent sendMessage() then silently no-ops
+                    # because readyState !== OPEN. Continuing the loop
+                    # preserves the connection across idle periods; real
+                    # disconnects still surface via the exception handler.
+                    continue
                 upstream.send(msg)
         except Exception:
             pass
