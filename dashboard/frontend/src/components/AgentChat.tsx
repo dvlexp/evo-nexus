@@ -104,6 +104,8 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reconnectDelayRef = useRef(1000)
   const dragCounterRef = useRef(0)
   const subagentToolRef = useRef<{ toolName: string; toolUseId: string; input: string; parentToolUseId: string } | null>(null)
 
@@ -134,12 +136,31 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
   useEffect(() => {
     if (!sessionId) return
 
-    setStatus('connecting')
-    setErrorMsg(null)
     let cancelled = false
-    let ws: WebSocket | null = null
 
-    ;(async () => {
+    // Schedule a reconnect with exponential backoff, capped at 30s. Reset to
+    // 1s on every successful onopen — see the matching reset below. Without
+    // this, a transient WS drop (proxy idle-timeout, network blip, laptop
+    // sleep/wake) leaves the chat permanently "open" in the UI but the
+    // socket closed: sendMessage() then silently no-ops because readyState
+    // !== OPEN, which is exactly the "I click send and nothing happens"
+    // failure mode users hit.
+    const scheduleReconnect = () => {
+      if (cancelled) return
+      if (reconnectTimerRef.current) return  // already scheduled
+      const delay = Math.min(reconnectDelayRef.current, 30000)
+      reconnectDelayRef.current = Math.min(delay * 2, 30000)
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null
+        if (!cancelled) connect()
+      }, delay)
+    }
+
+    const connect = async () => {
+      if (cancelled) return
+      setStatus('connecting')
+      setErrorMsg(null)
+
       // 1) HTTP preflight — fails fast on ECONNREFUSED so we can show a real error
       //    instead of hanging in 'connecting' forever (same pattern as AgentTerminal).
       try {
@@ -149,16 +170,19 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
         if (cancelled) return
         setStatus('error')
         setErrorMsg(`Could not reach terminal-server at ${TS_HTTP}. Is it running?`)
+        scheduleReconnect()
         return
       }
       if (cancelled) return
 
-      // 2) Open WS
-      ws = new WebSocket(`${TS_WS}/ws`)
+      // 2) Open WS — scope-local so each reconnect has its own instance and
+      //    handlers don't race against the next one.
+      const ws = new WebSocket(`${TS_WS}/ws`)
       wsRef.current = ws
 
       ws.onopen = () => {
-        ws!.send(JSON.stringify({ type: 'join_session', sessionId }))
+        reconnectDelayRef.current = 1000
+        ws.send(JSON.stringify({ type: 'join_session', sessionId }))
         setStatus('idle')
       }
 
@@ -273,26 +297,40 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
       }
 
       ws.onerror = () => {
-        if (cancelled) return
-        setStatus('error')
-        setErrorMsg('WebSocket error')
+        // Don't surface "WebSocket error" as a sticky error: most onerror
+        // events here are paired with an immediate onclose that triggers a
+        // reconnect, and showing the error disables the input mid-send. Just
+        // let onclose handle the recovery.
       }
 
-      ws.onclose = () => {
-        if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null }
-      }
-
-      pingRef.current = setInterval(() => {
-        if (ws!.readyState === WebSocket.OPEN) {
-          ws!.send(JSON.stringify({ type: 'ping' }))
+      // Per-ws ping interval; captured locally so onclose of an old ws
+      // doesn't clear the ping interval belonging to a newer reconnect.
+      const localPing = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping' }))
         }
       }, 25000)
-    })()
+      pingRef.current = localPing
+
+      ws.onclose = () => {
+        clearInterval(localPing)
+        if (pingRef.current === localPing) pingRef.current = null
+        if (cancelled) return
+        // The closing ws may not be the current one if a reconnect already
+        // raced ahead — only clear wsRef if it still points at us.
+        if (wsRef.current === ws) wsRef.current = null
+        scheduleReconnect()
+      }
+    }
+
+    connect()
 
     return () => {
       cancelled = true
       if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null }
-      try { ws?.close() } catch {}
+      if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null }
+      reconnectDelayRef.current = 1000
+      try { wsRef.current?.close() } catch {}
       wsRef.current = null
     }
   }, [sessionId])
