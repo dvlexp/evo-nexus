@@ -108,6 +108,12 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
   const reconnectDelayRef = useRef(1000)
   const dragCounterRef = useRef(0)
   const subagentToolRef = useRef<{ toolName: string; toolUseId: string; input: string; parentToolUseId: string } | null>(null)
+  // Auto-scroll só "segue" o stream se o usuário estiver perto do fundo. Se ele
+  // rolou para cima manualmente para ler histórico, NÃO joga ele de volta a
+  // cada nova mensagem/delta — UX comum em chat. Volta a seguir quando ele
+  // rolar de volta ao fundo (ou mandar nova mensagem, ver sendMessage).
+  const isAtBottomRef = useRef(true)
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false)
 
   // Auto-dismiss global notifications when the user opens this session
   useEffect(() => {
@@ -123,13 +129,39 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
     }
   }, [pendingApprovals.length, sessionId, onPendingCountChange])
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom — respeita scroll manual do usuário.
+  // Só rola se isAtBottomRef.current === true. Caso contrário (usuário rolou
+  // para cima), não força nada — assim ele consegue ler mensagens antigas
+  // sem ser teleportado de volta ao final a cada delta de stream.
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
-      if (scrollRef.current) {
+      if (scrollRef.current && isAtBottomRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight
       }
     })
+  }, [])
+
+  // Scroll forçado, ignora flag — usar quando o usuário pediu explicitamente
+  // (clique no botão "ir para o final" ou ao mandar nova mensagem).
+  const forceScrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+        isAtBottomRef.current = true
+        setShowJumpToBottom(false)
+      }
+    })
+  }, [])
+
+  // Threshold de 50px: se o usuário está a menos de 50px do fundo, considera
+  // "no fundo" e mantém auto-scroll ativo. Acima disso, suspende.
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    const atBottom = distanceFromBottom < 50
+    isAtBottomRef.current = atBottom
+    setShowJumpToBottom(!atBottom)
   }, [])
 
   // Connect WebSocket
@@ -200,6 +232,8 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
                 uuid: m.uuid,
                 streaming: false,
               })))
+              // Abriu a sessão agora — começa no fundo.
+              isAtBottomRef.current = true
               scrollToBottom()
             }
             // Restore ticket binding (Feature 1.3)
@@ -210,6 +244,7 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
             // Fallback history restore
             if (msg.messages?.length > 0) {
               setMessages(msg.messages.map((m: any) => ({ ...m, streaming: false })))
+              isAtBottomRef.current = true
               scrollToBottom()
             }
             break
@@ -759,6 +794,9 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
       rewindFromUuid: uuid,
     }))
 
+    // Mesmo motivo do sendMessage: reenviar/editar = quer ver o resultado.
+    isAtBottomRef.current = true
+    setShowJumpToBottom(false)
     scrollToBottom()
   }, [editingText, editingUuid, scrollToBottom])
 
@@ -825,6 +863,10 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
       files: filesForServer.length > 0 ? filesForServer : undefined,
     }))
 
+    // Mandou nova mensagem = sinal claro de "quero ver minha mensagem no
+    // fundo". Reativa auto-scroll mesmo se ele estava lendo histórico.
+    isAtBottomRef.current = true
+    setShowJumpToBottom(false)
     scrollToBottom()
     if (inputRef.current) {
       inputRef.current.style.height = 'auto'
@@ -1073,7 +1115,7 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
       )}
 
       {/* Messages area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-6 py-6 space-y-5 relative">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div
@@ -1264,6 +1306,25 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
           </div>
         )}
       </div>
+
+      {/* Botão flutuante "ir para o final" — aparece quando o usuário rolou
+          para cima e o auto-scroll está suspenso. Clique reativa o follow. */}
+      {showJumpToBottom && (
+        <button
+          onClick={forceScrollToBottom}
+          aria-label="Ir para o final"
+          className="absolute left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] shadow-lg transition-colors hover:bg-[#1a2744]"
+          style={{
+            bottom: '92px',
+            background: '#161b22',
+            borderColor: accentColor + '40',
+            color: accentColor,
+          }}
+        >
+          <ChevronDown size={12} />
+          Ir para o final
+        </button>
+      )}
 
       {/* Input area */}
       <div className="flex-shrink-0 border-t border-[#21262d] bg-[#0d1117] px-4 py-3">
