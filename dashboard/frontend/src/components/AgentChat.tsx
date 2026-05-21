@@ -130,13 +130,31 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
   }, [pendingApprovals.length, sessionId, onPendingCountChange])
 
   // Auto-scroll to bottom — respeita scroll manual do usuário.
-  // Só rola se isAtBottomRef.current === true. Caso contrário (usuário rolou
-  // para cima), não força nada — assim ele consegue ler mensagens antigas
-  // sem ser teleportado de volta ao final a cada delta de stream.
+  //
+  // Race fix: durante streaming rápido (60+ deltas/seg), o rAF de scrollToBottom
+  // pode rodar ANTES do onScroll do usuário propagar. Se confiarmos apenas no
+  // isAtBottomRef (atualizado por handleScroll), a flag estará stale → rolaríamos
+  // pra baixo mesmo o usuário já tendo rolado pra cima. Solução: recomputar
+  // distance from bottom no MOMENTO do scroll, dentro do rAF. Se o usuário já
+  // não está no fundo, atualiza a flag proativamente e não rola.
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
-      if (scrollRef.current && isAtBottomRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      const el = scrollRef.current
+      if (!el) return
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+      if (distance < 50) {
+        el.scrollTop = el.scrollHeight
+        if (!isAtBottomRef.current) {
+          isAtBottomRef.current = true
+          setShowJumpToBottom(false)
+        }
+      } else {
+        // Usuário rolou pra cima entre o agendamento do rAF e este momento.
+        // Atualiza a flag pra evitar futuros auto-scrolls até ele descer.
+        if (isAtBottomRef.current) {
+          isAtBottomRef.current = false
+          setShowJumpToBottom(true)
+        }
       }
     })
   }, [])
@@ -327,6 +345,7 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
             break
 
           case 'pong':
+            lastPongAt = Date.now()
             break
         }
       }
@@ -338,12 +357,23 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
         // let onclose handle the recovery.
       }
 
-      // Per-ws ping interval; captured locally so onclose of an old ws
-      // doesn't clear the ping interval belonging to a newer reconnect.
+      // Per-ws ping interval + heartbeat-timeout. Captured locally so onclose
+      // of an old ws doesn't clear the ping interval belonging to a newer
+      // reconnect. The ws library can leave a socket "half-open" — TCP died
+      // but no close frame ever arrives — so onclose never fires and the
+      // frontend silently stops receiving chat_event. Symptom: agent reply
+      // only shows up after a manual F5 (the reload re-runs session_joined,
+      // which restores chatHistory from the server). Fix: track last pong;
+      // if more than 60s elapsed since one was received, force-close the
+      // socket so onclose → scheduleReconnect kicks in.
+      let lastPongAt = Date.now()
       const localPing = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'ping' }))
+        if (ws.readyState !== WebSocket.OPEN) return
+        if (Date.now() - lastPongAt > 60000) {
+          try { ws.close() } catch {}
+          return
         }
+        ws.send(JSON.stringify({ type: 'ping' }))
       }, 25000)
       pingRef.current = localPing
 
@@ -738,7 +768,7 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
   // Extract plain text from a message for copying
   const getMessageText = (msg: ChatMessage): string => {
     if (msg.role === 'user' || msg.role === 'system') return msg.text
-    return msg.blocks
+    return (msg.blocks ?? [])
       .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
       .map(b => b.text)
       .join('\n\n')
@@ -979,7 +1009,13 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
 
   const isConnecting = externalLoading || status === 'connecting'
   const effectiveError = externalError || (status === 'error' ? errorMsg : null)
-  const inputDisabled = isConnecting || !!effectiveError
+  // Don't disable the textarea during transient reconnects — disabling blurs
+  // the cursor (native behavior of <textarea disabled>), which forces the user
+  // to click back in after every WS hiccup. canSend already gates the Send
+  // button on readyState === OPEN, so typing while the socket is down is safe:
+  // the text stays in React state and gets sent the moment the WS reopens.
+  // Only hard errors (server unreachable) still disable input.
+  const inputDisabled = !!effectiveError
   const canSend = (input.trim().length > 0 || attachedFiles.length > 0) && !inputDisabled && status !== 'running'
 
   return (
@@ -1239,7 +1275,7 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
                   <AgentAvatar name={agent} size={28} />
                 </div>
                 <div className="flex-1 min-w-0 space-y-2">
-                  {(msg as any).blocks.map((block: AssistantBlock, j: number) => (
+                  {(((msg as any).blocks ?? []) as AssistantBlock[]).map((block: AssistantBlock, j: number) => (
                     <div key={j}>
                       {block.type === 'text' && (
                         <div className="text-sm text-[#e6edf3] leading-relaxed prose-invert max-w-none">
@@ -1253,7 +1289,7 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
                   ))}
                   {/* Typing indicator — shown while streaming with no visible content yet */}
                   {(msg as any).streaming && (() => {
-                    const blocks = (msg as any).blocks as AssistantBlock[]
+                    const blocks = (((msg as any).blocks ?? []) as AssistantBlock[])
                     const hasVisibleContent = blocks.some(b => b.type === 'text' || b.type === 'tool_use')
                     return !hasVisibleContent
                   })() && (
