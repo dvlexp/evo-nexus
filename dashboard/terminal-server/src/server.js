@@ -18,8 +18,10 @@ class TerminalServer {
     this.baseFolder = process.cwd();
     const ttlHours = Number(process.env.TERMINAL_SESSION_TTL_HOURS);
     const gcMinutes = Number(process.env.TERMINAL_SESSION_GC_INTERVAL_MINUTES);
+    // RXP fix 2026-05-18: default TTL bumped 24h → 90 days (was deleting Daniel's old conversations daily).
+    // Override via env TERMINAL_SESSION_TTL_HOURS if needed.
     this.sessionTtlMs = options.sessionTtlMs ?? (
-      Number.isFinite(ttlHours) && ttlHours > 0 ? ttlHours * 60 * 60 * 1000 : (24 * 60 * 60 * 1000)
+      Number.isFinite(ttlHours) && ttlHours > 0 ? ttlHours * 60 * 60 * 1000 : (90 * 24 * 60 * 60 * 1000)
     );
     this.sessionGcIntervalMs = options.sessionGcIntervalMs ?? (
       Number.isFinite(gcMinutes) && gcMinutes >= 0 ? gcMinutes * 60 * 1000 : (15 * 60 * 1000)
@@ -535,7 +537,7 @@ class TerminalServer {
     this.wss.on('connection', (ws, req) => this.handleWebSocketConnection(ws, req));
 
     return new Promise((resolve, reject) => {
-      server.listen(this.port, '0.0.0.0', (err) => {
+      server.listen(this.port, '::', (err) => {
         if (err) return reject(err);
         this.server = server;
         resolve(server);
