@@ -35,7 +35,7 @@ def connect():
     params = urllib.parse.urlencode({
         "client_id": app_id,
         "redirect_uri": _callback_url(),
-        "scope": "instagram_basic,instagram_manage_insights,pages_show_list,instagram_content_publish,publish_video",
+        "scope": "pages_show_list,pages_read_engagement,instagram_manage_insights,instagram_manage_comments",
         "response_type": "code",
         "state": state,
     })
