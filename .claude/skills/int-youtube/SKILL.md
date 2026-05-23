@@ -9,12 +9,58 @@ YouTube integration to monitor Evolution channels and others. Supports multiple 
 
 ## Setup
 
-Accounts configured via `make social-auth` (OAuth login) or manually in `.env`:
+### Conta Principal — Daniel Valladares (autenticada)
+
+Configurada via `.env` (gitignored):
+
+```env
+YOUTUBE_OAUTH_CLIENT_ID=<seu_client_id>.apps.googleusercontent.com
+YOUTUBE_OAUTH_CLIENT_SECRET=<seu_client_secret>
+YOUTUBE_REFRESH_TOKEN=<seu_refresh_token>
+```
+
+Scopes: `youtube`, `youtube.readonly`, `yt-analytics.readonly`, `yt-analytics-monetary.readonly`
+
+### Contas adicionais (SOCIAL_YOUTUBE_N_*)
+
+Configuráveis via `make social-auth` (OAuth login) ou manualmente no `.env`:
 ```env
 SOCIAL_YOUTUBE_1_LABEL=Evolution API
 SOCIAL_YOUTUBE_1_ACCESS_TOKEN=ya29...
 SOCIAL_YOUTUBE_1_CHANNEL_ID=UC9kZHm3TnEt41ztGOLyQO9g
 SOCIAL_YOUTUBE_1_REFRESH_TOKEN=1//0h...
+```
+
+### Auth Helper
+
+```python
+import os, urllib.request, urllib.parse, json
+
+def get_youtube_token() -> str:
+    data = urllib.parse.urlencode({
+        "client_id":     os.environ["YOUTUBE_OAUTH_CLIENT_ID"],
+        "client_secret": os.environ["YOUTUBE_OAUTH_CLIENT_SECRET"],
+        "refresh_token": os.environ["YOUTUBE_REFRESH_TOKEN"],
+        "grant_type":    "refresh_token",
+    }).encode()
+    req = urllib.request.Request(
+        "https://oauth2.googleapis.com/token", data=data,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    return json.loads(urllib.request.urlopen(req).read())["access_token"]
+
+def ytapi(path: str) -> dict:
+    at = get_youtube_token()
+    req = urllib.request.Request(
+        f"https://www.googleapis.com/youtube/v3{path}",
+        headers={"Authorization": f"Bearer {at}"}
+    )
+    return json.loads(urllib.request.urlopen(req).read())
+
+# Canal próprio
+# ytapi("/channels?part=snippet,statistics&mine=true")
+# Últimos vídeos
+# ytapi("/search?part=snippet&forMine=true&type=video&order=date&maxResults=10")
 ```
 
 ## API Client
