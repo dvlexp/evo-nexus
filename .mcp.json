@@ -35,6 +35,13 @@
     "intercom": {
       "type": "http",
       "url": "https://mcp.intercom.com/mcp"
+    },
+    "mercadopago": {
+      "type": "http",
+      "url": "https://mcp.mercadopago.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MERCADOPAGO_TOKEN}"
+      }
     }
   }
 }
