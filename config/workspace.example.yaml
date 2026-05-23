@@ -1,0 +1,16 @@
+chat:
+  trustMode: false
+company: <Your Company>
+dashboard:
+  port: 8080
+language: <pt-BR | en-US>
+name: <Workspace Name>
+owner: <Your Name>
+port: 8080
+timezone: <America/Sao_Paulo | UTC>
+workspace:
+  company: <Inner Company / Brand>
+  language: <pt-BR | en-US>
+  name: <WORKSPACE_SLUG>
+  owner: <Your Name>
+  timezone: <Region/City>
