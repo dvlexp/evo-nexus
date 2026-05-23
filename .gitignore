@@ -134,3 +134,9 @@ plugins/*/
 
 # ── Brain Repo raw transcripts (not backed up to brain repo) ──
 memory/raw-transcripts/
+
+# ── Development handoff notes (internal) ──
+.handoffs/
+
+# ── Agent runtime state ──
+.claude/agent-status.json
