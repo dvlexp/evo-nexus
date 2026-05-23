@@ -424,7 +424,8 @@ export default function AgentChat({ agent, sessionId, accentColor = '#00FFA7', e
   // Fetch open tickets for this agent when picker opens (Feature 1.3)
   useEffect(() => {
     if (!showTicketPicker) return
-    fetch(`/api/tickets?assignee_agent=${encodeURIComponent(agent)}&status=open&status=in_progress`, {
+    const agentFilter = agent ? `&assignee_agent=${encodeURIComponent(agent)}` : ''
+    fetch(`/api/tickets?status=open&status=in_progress${agentFilter}`, {
       credentials: 'include',
     })
       .then(r => r.ok ? r.json() : null)

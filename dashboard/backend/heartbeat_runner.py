@@ -240,7 +240,8 @@ def step7_invoke_claude(
         "--max-turns", str(max_turns),
         "--dangerously-skip-permissions",
         "--output-format", "json",
-        prompt,  # positional argument — Claude CLI does not have a -p flag
+        # prompt is passed via stdin to avoid the CLI interpreting leading '---'
+        # (YAML frontmatter in agent .md files) as an unknown flag
     ]
 
     start_time = time.time()
@@ -252,6 +253,7 @@ def step7_invoke_claude(
     try:
         proc = subprocess.Popen(
             cmd,
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -260,7 +262,7 @@ def step7_invoke_claude(
         )
 
         try:
-            stdout, stderr = proc.communicate(timeout=timeout_seconds)
+            stdout, stderr = proc.communicate(input=prompt, timeout=timeout_seconds)
             output = stdout or ""
             if proc.returncode != 0:
                 status = "fail"
