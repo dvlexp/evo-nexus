@@ -38,7 +38,7 @@ Analisar a descrição do usuário para identificar:
 - BigQuery (Google Cloud)
 - Redshift (Amazon)
 - Databricks SQL
-- MySQL / AWS Aurora MySQL
+- MySQL / Amazon RDS for MySQL
 - DuckDB
 - SQLite
 
