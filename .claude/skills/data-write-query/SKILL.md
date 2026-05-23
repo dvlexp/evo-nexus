@@ -31,14 +31,14 @@ Analisar a descrição do usuário para identificar:
 
 **Dialeto primário do workspace:**
 
-- **PostgreSQL** — padrão para todo o stack Evolution (Evo CRM, Evo AI, serviços internos, Aurora RDS, Supabase, Neon)
+- **PostgreSQL** — padrão para todo o stack Evolution (Evo CRM, Evo AI, serviços internos, AWS RDS, Supabase, Neon)
 
 **Dialetos secundários (se explicitamente solicitados):**
 - Snowflake
 - BigQuery (Google Cloud)
 - Redshift (Amazon)
 - Databricks SQL
-- MySQL / Aurora MySQL
+- MySQL / AWS Aurora MySQL
 - DuckDB
 - SQLite
 

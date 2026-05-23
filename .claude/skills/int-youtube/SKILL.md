@@ -9,7 +9,7 @@ YouTube integration to monitor Evolution channels and others. Supports multiple 
 
 ## Setup
 
-### Conta Principal — Daniel Valladares (autenticada)
+### Conta Principal (autenticada)
 
 Configurada via `.env` (gitignored):
 

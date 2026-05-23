@@ -8,7 +8,7 @@ class SessionStore {
         // Store sessions in user's home directory
         this.storageDir = options.storageDir || path.join(os.homedir(), '.claude-code-web');
         this.sessionsFile = path.join(this.storageDir, 'sessions.json');
-        // RXP fix 2026-05-18: TTL bumped 24h → 90d (was deleting all Daniel's conversations every day)
+        // fix: TTL bumped 24h → 90d (was deleting all conversations every day)
         this.sessionTtlMs = options.sessionTtlMs ?? (90 * 24 * 60 * 60 * 1000);
         this.maxFileAgeDays = options.maxFileAgeDays ?? 90;
         fsSync.mkdirSync(this.storageDir, { recursive: true });

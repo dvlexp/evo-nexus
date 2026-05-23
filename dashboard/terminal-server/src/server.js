@@ -18,7 +18,7 @@ class TerminalServer {
     this.baseFolder = process.cwd();
     const ttlHours = Number(process.env.TERMINAL_SESSION_TTL_HOURS);
     const gcMinutes = Number(process.env.TERMINAL_SESSION_GC_INTERVAL_MINUTES);
-    // RXP fix 2026-05-18: default TTL bumped 24h → 90 days (was deleting Daniel's old conversations daily).
+    // fix: default TTL bumped 24h → 90 days (was deleting old conversations daily).
     // Override via env TERMINAL_SESSION_TTL_HOURS if needed.
     this.sessionTtlMs = options.sessionTtlMs ?? (
       Number.isFinite(ttlHours) && ttlHours > 0 ? ttlHours * 60 * 60 * 1000 : (90 * 24 * 60 * 60 * 1000)
