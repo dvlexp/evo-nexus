@@ -8,8 +8,9 @@ class SessionStore {
         // Store sessions in user's home directory
         this.storageDir = options.storageDir || path.join(os.homedir(), '.claude-code-web');
         this.sessionsFile = path.join(this.storageDir, 'sessions.json');
-        this.sessionTtlMs = options.sessionTtlMs ?? (24 * 60 * 60 * 1000);
-        this.maxFileAgeDays = options.maxFileAgeDays ?? 7;
+        // Default TTL bumped to 90 days to preserve long-running sessions.
+        this.sessionTtlMs = options.sessionTtlMs ?? (90 * 24 * 60 * 60 * 1000);
+        this.maxFileAgeDays = options.maxFileAgeDays ?? 90;
         fsSync.mkdirSync(this.storageDir, { recursive: true });
         this.initializeStorage();
     }
