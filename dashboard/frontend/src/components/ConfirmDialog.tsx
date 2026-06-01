@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useLocation } from 'react-router-dom'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -248,6 +249,15 @@ function ConfirmDialogUI({
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<DialogState>(INITIAL_STATE)
+  const location = useLocation()
+
+  // Cancel pending dialog when user navigates away without answering
+  useEffect(() => {
+    if (state.open) {
+      state.resolve?.(false)
+      setState(INITIAL_STATE)
+    }
+  }, [location.pathname])
 
   const confirm = useCallback<ConfirmFn>((options) => {
     return new Promise<boolean>((resolve) => {

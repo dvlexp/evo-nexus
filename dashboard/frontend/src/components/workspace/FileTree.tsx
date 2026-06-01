@@ -94,7 +94,7 @@ function TreeItem({ node, level, selectedPath, onSelect, onNavigate, searchTerm 
       !hasAutoExpanded.current &&
       node.is_dir &&
       selectedPath &&
-      selectedPath.startsWith(node.path + '/') &&
+      (selectedPath.startsWith(node.path + '/') || selectedPath === node.path) &&
       !expanded
     ) {
       hasAutoExpanded.current = true

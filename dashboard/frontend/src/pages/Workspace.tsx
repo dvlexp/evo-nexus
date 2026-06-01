@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { CheckCircle, Copy, Check, PanelLeftOpen } from 'lucide-react'
+import { CheckCircle, Copy, Check, PanelLeftOpen, Folder, FileText, File, ChevronRight } from 'lucide-react'
 import { api } from '../lib/api'
-import FileTree from '../components/workspace/FileTree'
+import FileTree, { type TreeNode } from '../components/workspace/FileTree'
 import FileToolbar, { type EditorMode } from '../components/workspace/FileToolbar'
 import FilePreview from '../components/workspace/FilePreview'
 import FileEditor from '../components/workspace/FileEditor'
@@ -94,6 +94,92 @@ function NameDialog({ title, placeholder, defaultValue = '', onConfirm, onCancel
             Confirmar
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function DirectoryView({ path, onSelect }: { path: string; onSelect: (p: string, isDir: boolean) => void }) {
+  const [items, setItems] = useState<TreeNode[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    api.get(`/workspace/tree?path=${encodeURIComponent(path)}&depth=1`)
+      .then((data) => {
+        const sorted = ((data.items || []) as TreeNode[]).sort((a, b) => {
+          if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1
+          return a.name.localeCompare(b.name)
+        })
+        setItems(sorted)
+      })
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false))
+  }, [path])
+
+  if (loading) {
+    return (
+      <div className="p-6 space-y-2">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="h-10 rounded-lg" style={{ background: 'var(--bg-card)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        ))}
+      </div>
+    )
+  }
+
+  const dirs = items.filter((i) => i.is_dir)
+  const files = items.filter((i) => !i.is_dir)
+
+  if (items.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Pasta vazia</p>
+      </div>
+    )
+  }
+
+  const Section = ({ title, nodes, isDir: sectionIsDir }: { title: string; nodes: TreeNode[]; isDir: boolean }) => (
+    <div className="mb-5">
+      <p className="text-xs font-semibold tracking-wide mb-2 px-1" style={{ color: 'var(--text-muted)' }}>{title}</p>
+      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+        {nodes.map((item, i) => {
+          const IconComp = sectionIsDir ? Folder : (item.extension === '.md' || item.extension === '.txt' ? FileText : File)
+          return (
+            <button
+              key={item.path}
+              onClick={() => onSelect(item.path, sectionIsDir)}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors"
+              style={{
+                borderBottom: i < nodes.length - 1 ? '1px solid var(--border)' : 'none',
+                background: 'transparent',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <IconComp size={15} style={{ color: sectionIsDir ? 'var(--evo-green)' : 'var(--text-muted)', flexShrink: 0 }} />
+              <span className="text-sm flex-1 truncate" style={{ color: 'var(--text-primary)' }}>{item.name}</span>
+              {!sectionIsDir && item.size ? (
+                <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-muted)' }}>{formatBytes(item.size)}</span>
+              ) : null}
+              {sectionIsDir && <ChevronRight size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="p-6 overflow-y-auto h-full">
+      <div className="max-w-2xl mx-auto">
+        {dirs.length > 0 && <Section title="PASTAS" nodes={dirs} isDir={true} />}
+        {files.length > 0 && <Section title="ARQUIVOS" nodes={files} isDir={false} />}
       </div>
     </div>
   )
@@ -803,11 +889,7 @@ export default function Workspace() {
           )}
 
           {selectedPath && isDir && (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                Selecione um arquivo para visualizar
-              </p>
-            </div>
+            <DirectoryView path={selectedPath} onSelect={handleSelect} />
           )}
         </div>
       </div>

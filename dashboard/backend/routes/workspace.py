@@ -243,6 +243,14 @@ def workspace_tree():
         for entry in children:
             if _is_blocklisted(entry.name):
                 continue
+            # Skip symlinks that point outside REPO_ROOT to prevent traversing
+            # large external directories (which causes multi-MB responses / timeouts)
+            if entry.is_symlink():
+                try:
+                    if not _is_relative_to(entry.resolve(), REPO_ROOT.resolve()):
+                        continue
+                except OSError:
+                    continue
             item = _stat_entry(entry, full)
             if item is None:
                 continue  # broken symlink / inaccessible
