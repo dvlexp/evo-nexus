@@ -21,7 +21,9 @@ Save the report in two formats:
 - **HTML:** read the template '.claude/templates/html/weekly-review.html', fill all {{PLACEHOLDER}} with collected data and save to 'workspace/daily-logs/[C] YYYY-WXX-weekly-review.html'
 - **MD:** also save the markdown version to 'workspace/daily-logs/[C] YYYY-WXX-weekly-review.md' using the template in .claude/templates/weekly-review.md
 
-Create the directory 'workspace/daily-logs/' if it doesn't exist."""
+Create the directory 'workspace/daily-logs/' if it doesn't exist.
+
+Ao finalizar, envie uma notificação via Telegram para Daniel com um resumo da semana (5-8 linhas: conquistas, pendências, próxima semana, destaques financeiros se houver)."""
 
 TEAM_PROMPT = """
 Create an agent team for the weekly review.
