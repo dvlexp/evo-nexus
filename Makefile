@@ -154,7 +154,7 @@ telegram:           ## 📨 Start Telegram bot in background (screen)
 	@if screen -list | grep -q '\.telegram'; then \
 		echo "⚠ Telegram bot is already running. Use 'make telegram-stop' first or 'make telegram-attach' to connect."; \
 	else \
-		screen -dmS telegram claude --channels plugin:telegram@claude-plugins-official --dangerously-skip-permissions; \
+		screen -dmS telegram sh -c "PATH=$$HOME/.bun/bin:$$PATH exec claude --channels plugin:telegram@claude-plugins-official --dangerously-skip-permissions"; \
 		echo "✅ Telegram bot running in background (screen: telegram)"; \
 		echo "📺 Ver: screen -r telegram"; \
 		echo "🛑 Parar: make telegram-stop"; \
