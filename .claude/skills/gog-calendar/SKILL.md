@@ -1,16 +1,16 @@
 ---
 name: gog-calendar
 description: Review calendar agenda, find available meeting slots, and schedule events. Displays today's or week's schedule, suggests meeting times based on availability, creates calendar events with explicit user confirmation. Use when user mentions calendar, schedule, meetings, or availability. Never creates or modifies events without confirmation.
-compatibility: Requires gog CLI tool with calendar access
 metadata:
   author: gog-skills
-  version: "1.0"
-allowed-tools: Bash(gog:*) Read
+  version: "1.1"
 ---
 
 # Calendar & Scheduling Assistant
 
 Review your schedule, find meeting slots, and create events with smart suggestions.
+
+**Integration**: Uses the Google Calendar MCP (`mcp__claude_ai_Google_Calendar__*` tools) — NOT the `gog` CLI. The MCP is always available and does not require any CLI setup.
 
 ## When to Use
 
@@ -22,15 +22,6 @@ Use this skill when:
 - User wants to create a calendar event
 
 **Important**: This skill NEVER creates or modifies events without explicit user confirmation.
-
-## Dynamic Context
-
-The following live data is available:
-
-**Today's agenda:**
-```
-!`gog calendar events --today --json 2>/dev/null || echo "GOG_NOT_CONFIGURED"`
-```
 
 ## Workflow
 
