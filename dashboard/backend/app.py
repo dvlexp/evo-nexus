@@ -749,6 +749,7 @@ PUBLIC_PATHS = {
     "/api/version",
     "/api/version/check",
     "/api/agents/active",
+    "/api/aurora/bot-control",
 }
 
 def _try_api_token_auth():

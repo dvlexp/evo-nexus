@@ -26,7 +26,12 @@ PARTENON_URL = "https://labs.xmacna.ai/partenon/api/bot-control/pause"
 PARTENON_SECRET = "AqGnlq8HfhRSWGp5UjyCJzTysNZ16Z0Q3cxyuLgUXn8="
 CHATWOOT_ACCOUNT_ID = 99  # numeric ID used by Aurora's self_pause tool
 
-_SHARED_SECRET = os.getenv("AURORA_WEBHOOK_SECRET", "")
+# Secret is mandatory — must be set via env or falls back to default.
+# The same value must be embedded as ?secret=... in the EvoCRM automation webhook URLs.
+_WEBHOOK_SECRET = os.getenv(
+    "AURORA_WEBHOOK_SECRET",
+    "d3ec9dc03dbc4f537543cf566a66e4a34c20131b5ddb6d6e",
+)
 
 
 def _phone_to_jid(phone: str) -> str | None:
@@ -39,11 +44,11 @@ def _phone_to_jid(phone: str) -> str | None:
 
 @bp.route("/api/aurora/bot-control", methods=["POST"])
 def aurora_bot_control():
-    # Optional shared secret validation
-    if _SHARED_SECRET:
-        incoming = request.headers.get("X-Aurora-Secret", "")
-        if incoming != _SHARED_SECRET:
-            return jsonify({"error": "unauthorized"}), 401
+    # Validate secret from query param (embedded in EvoCRM automation webhook URL)
+    import secrets as _secrets
+    incoming = request.args.get("secret", "")
+    if not _secrets.compare_digest(incoming, _WEBHOOK_SECRET):
+        return jsonify({"error": "unauthorized"}), 401
 
     action = request.args.get("action", "").lower()
     if action not in ("pause", "unpause"):
@@ -69,7 +74,7 @@ def aurora_bot_control():
         resp = requests.post(
             PARTENON_URL,
             json={
-                "account_id": CHATWOOT_ACCOUNT_ID,
+                "account_id": CHATWOOT_ACCOUNT_ID,  # 99 = Aurora's account
                 "remote_jid": remote_jid,
                 "paused": paused,
                 "paused_by": "human:evocrm_automation",
