@@ -1,0 +1,166 @@
+# video-edit skill default configuration
+# Override per-episode in episode_dir/config.yaml
+
+# --- Audio Processing ---
+audio:
+  # Sample rate for all intermediate audio
+  sample_rate: 48000
+  # Channels (mono for voice)
+  channels: 1
+  # Bit depth for intermediate WAV
+  bit_depth: 24
+  # Target LUFS for final output (YouTube standard)
+  target_lufs: -14
+  # True peak limit
+  true_peak_dbtp: -1
+  # Acceptable LUFS range
+  lufs_tolerance: 0.5  # -14 ± 0.5
+
+# --- Sync Detection ---
+sync:
+  # Window to search for clap (seconds from start)
+  clap_search_window: 30
+  # Highpass filter for clap detection (Hz)
+  clap_highpass_hz: 2000
+  # Minimum amplitude for clap peak (normalized 0-1)
+  clap_min_amplitude: 0.8
+  # Minimum confidence for sync offset
+  min_confidence: 0.85
+  # Cross-correlation fallback window (seconds)
+  xcorr_window: 60
+  # Maximum acceptable drift (samples per minute)
+  max_drift_samples_per_min: 1
+
+# --- DeepFilterNet ---
+denoise:
+  # DeepFilterNet settings (CPU mode)
+  # Noise reduction level (0.0 = off, 1.0 = max)
+  attenuation_limit: 100
+
+# --- EQ & Compression ---
+eq:
+  # High-pass filter (remove rumble)
+  highpass_hz: 80
+  # Low-shelf cut at 200Hz
+  lowshelf_hz: 200
+  lowshelf_gain_db: -2
+  # Presence boost at 3kHz
+  presence_hz: 3000
+  presence_gain_db: 2
+  # Compressor settings
+  compressor_threshold_db: -18
+  compressor_ratio: 3
+  compressor_attack_ms: 5
+  compressor_release_ms: 50
+
+# --- Transcription ---
+transcription:
+  # WhisperX model size (small, medium, large-v2, large-v3)
+  model_size: medium
+  # Language
+  language: pt
+  # Compute type for faster-whisper (int8 for CPU)
+  compute_type: int8
+  # Device (cpu or cuda)
+  device: cpu
+  # Batch size for alignment
+  batch_size: 8
+
+# --- Filler Removal ---
+filler:
+  # Minimum duration to consider a filler (seconds)
+  min_duration_ms: 250
+  # Maximum gap to merge adjacent cuts (ms)
+  merge_gap_ms: 100
+  # Crossfade duration at cut points (ms)
+  crossfade_ms: 30
+
+# --- Silence Removal ---
+silence:
+  # auto-editor threshold (0-1, lower = more aggressive)
+  threshold: 0.04
+  # Frame margin (preserve N frames around speech)
+  frame_margin: 6
+  # Minimum cut length (seconds)
+  min_cut_length: 0.8
+  # Maximum acceptable A/V drift (ms)
+  max_av_drift_ms: 40
+
+# --- Background Removal ---
+bg_removal:
+  # MediaPipe model selection (0=landscape, 1=general)
+  model_selection: 1
+  # Feather radius for mask edge (pixels)
+  feather_radius: 3
+  # Enable by default (can be skipped with --skip)
+  enabled: true
+
+# --- Motion Graphics ---
+motion_graphics:
+  # Default duration for graphics (seconds)
+  default_duration: 2.5
+  # Safe zone margin (percentage)
+  safe_zone_margin: 5
+  # Enable by default
+  enabled: true
+
+# --- SFX ---
+sfx:
+  # SFX level relative to voice LUFS
+  level_below_voice_db: 6  # -6 dB below voice = -20 LUFS if voice is -14
+  # Target LUFS for SFX
+  target_lufs: -20
+
+# --- Render ---
+render:
+  # Video codec
+  video_codec: libx264
+  # Encoder preset (ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow)
+  preset: medium
+  # CRF (0=lossless, 23=default, 51=worst)
+  crf: 20
+  # Pixel format
+  pix_fmt: yuv420p
+  # Profile
+  profile: high
+  # Level
+  level: "4.1"
+  # Enable faststart for streaming
+  faststart: true
+  # Audio codec
+  audio_codec: aac
+  # Audio bitrate
+  audio_bitrate: 192k
+  # Audio sample rate
+  audio_sample_rate: 48000
+  # Audio channels (stereo for final)
+  audio_channels: 2
+  # Resolution 16:9
+  width_16x9: 1920
+  height_16x9: 1080
+  # Resolution 9:16 (shorts)
+  width_9x16: 1080
+  height_9x16: 1920
+  # Frame rate
+  fps: 30
+  # Max duration for shorts (seconds)
+  shorts_max_duration: 60
+
+# --- Preview Mode ---
+preview:
+  # Preview duration (seconds)
+  duration_seconds: 300  # 5 minutes
+  # Preview resolution
+  width: 960
+  height: 540
+  # Skip heavy stages by default in preview
+  skip_stages:
+    - bg-removal
+    - motion-graphics
+
+# --- Checkpointing ---
+checkpoint:
+  # State file name
+  state_file: pipeline_state.json
+  # Log file name
+  log_file: pipeline.log

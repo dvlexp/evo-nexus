@@ -1,0 +1,109 @@
+# Filler words for Brazilian Portuguese
+# Used by cut-fillers stage to remove hesitations and verbal tics
+#
+# Format:
+#   word: canonical form (lowercase, no punctuation)
+#   variants: alternative spellings/transcriptions
+#   category: hesitation | connector | confirmation | other
+#
+# Adjustment:
+#   - Add words that are frequently cut incorrectly to config/whitelist-ptbr.yaml
+#   - Minimum duration threshold is in config/defaults.yaml (filler.min_duration_ms)
+
+fillers:
+  # Hesitations (most common)
+  - word: "é"
+    variants: ["eh", "éh", "ééé"]
+    category: hesitation
+
+  - word: "e"
+    variants: ["ee", "eee"]
+    category: hesitation
+
+  - word: "uhm"
+    variants: ["um", "hum", "humm", "uhmm", "ummm"]
+    category: hesitation
+
+  - word: "ah"
+    variants: ["aah", "aaah", "a"]
+    category: hesitation
+
+  - word: "hmm"
+    variants: ["hm", "hmmm", "mmm", "mm"]
+    category: hesitation
+
+  - word: "aham"
+    variants: ["ahan", "ahamm", "a-hã"]
+    category: hesitation
+
+  # Connectors (often unnecessary)
+  - word: "tipo"
+    variants: ["tipow", "tipo assim"]
+    category: connector
+
+  - word: "sabe"
+    variants: ["sab", "sabê"]
+    category: connector
+
+  - word: "então"
+    variants: ["entao", "entaum", "então assim"]
+    category: connector
+
+  - word: "assim"
+    variants: ["assimm"]
+    category: connector
+
+  - word: "né"
+    variants: ["ne", "neh", "né?"]
+    category: confirmation
+
+  # Confirmations
+  - word: "tá"
+    variants: ["ta", "tah"]
+    category: confirmation
+
+  - word: "certo"
+    variants: ["certow"]
+    category: confirmation
+
+  - word: "perfeito"
+    variants: []
+    category: confirmation
+
+  - word: "beleza"
+    variants: []
+    category: confirmation
+
+  - word: "ok"
+    variants: ["okay", "okei"]
+    category: confirmation
+
+  # Other verbal tics
+  - word: "tipo assim"
+    variants: []
+    category: other
+
+  - word: "basicamente"
+    variants: []
+    category: other
+
+  - word: "literalmente"
+    variants: []
+    category: other
+
+  - word: "enfim"
+    variants: []
+    category: other
+
+  - word: "bom"
+    variants: []
+    category: other
+
+  - word: "olha"
+    variants: ["oia"]
+    category: other
+
+# Words that should NOT be cut even if detected as fillers
+# (handled in separate whitelist file, but listed here as reference)
+# - "é" when part of verb conjugation (context-dependent)
+# - "e" when connecting sentences (context-dependent)

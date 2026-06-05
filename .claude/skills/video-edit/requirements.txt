@@ -1,0 +1,40 @@
+# video-edit skill dependencies
+# Runs on CPU-only (i5-2415M, no AVX2 requirement)
+# Install: pip install -r requirements.txt --no-cache-dir
+
+# Transcription - WhisperX for word-level PT-BR timestamps
+whisperx>=3.1.1
+
+# Audio denoising
+deepfilternet>=0.5.6
+
+# Background removal (CPU selfie segmentation)
+mediapipe>=0.10.14
+
+# Audio normalization to -14 LUFS
+ffmpeg-normalize>=1.27.7
+
+# Intelligent silence removal
+auto-editor>=24.31.1
+
+# YOLOv8 for 9:16 face tracking (Autocrop-vertical)
+ultralytics>=8.2.0
+
+# Audio manipulation
+pydub>=0.25.1
+
+# Numerical operations
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Configuration
+pyyaml>=6.0.1
+
+# Pretty logging
+rich>=13.7.0
+
+# Progress bars
+tqdm>=4.66.0
+
+# Structured logging
+structlog>=24.1.0
