@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Evo CRM</title>
+    <script type="module" crossorigin src="/assets/index-DE-wItc5.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DCs7ESb_.css">
+      <script>
+/* RXP right-click fix v3 — smart contextmenu fix.
+   Reason: Radix ContextMenu auto-selects "Priority Low" on pointerup after
+   the menu opens at the click position. v2 blocked all contextmenu events
+   entirely (broke the label/agent menu). v3 allows contextmenu to propagate
+   so the Radix menu opens, but absorbs the first pointerup that follows,
+   preventing Radix from treating it as an item selection. */
+(function() {
+  var blockNextPointerUp = false;
+  document.addEventListener('contextmenu', function() {
+    blockNextPointerUp = true;
+    setTimeout(function() { blockNextPointerUp = false; }, 300);
+  }, true);
+  document.addEventListener('pointerup', function(e) {
+    if (blockNextPointerUp) {
+      blockNextPointerUp = false;
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }
+  }, true);
+  console.log('[RXP] right-click fix v3 aplicado');
+})();
+
+/* RXP WebSocket watchdog v1
+   Reason: bundle WS client stops retrying after qK attempts (originally 50,
+   patched to 9999). This watchdog adds an extra safety net: when the user
+   returns to the tab after it was hidden, force-reload if WS has been
+   disconnected for > 5 minutes with no recovery.
+   This complements the qK=9999 patch in the bundle. */
+(function() {
+  var hiddenAt = null;
+  var WS_STALE_MS = 5 * 60 * 1000; // 5 minutes
+  document.addEventListener("visibilitychange", function() {
+    if (document.hidden) {
+      hiddenAt = Date.now();
+    } else {
+      if (hiddenAt && (Date.now() - hiddenAt) > WS_STALE_MS) {
+        // Page was hidden for >5min — reload to restore WS
+        console.warn("[RXP] Tab voltou após >5min oculto — recarregando para restaurar WebSocket");
+        hiddenAt = null;
+        window.location.reload();
+      } else {
+        hiddenAt = null;
+      }
+    }
+  });
+  console.log("[RXP] WebSocket watchdog v1 ativo");
+})();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
