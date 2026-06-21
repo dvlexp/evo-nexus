@@ -603,6 +603,29 @@ with app.app_context():
         _conn.commit()
     # --- End Wave 2.2r migration ---
 
+    # --- EvoHub → Kommo Notes Bridge idempotency table ---
+    _existing_tables_bridge = {
+        row[0]
+        for row in _cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    }
+    if "evohub_kommo_bridge_events" not in _existing_tables_bridge:
+        _cur.execute(
+            """CREATE TABLE evohub_kommo_bridge_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                message_id INTEGER NOT NULL,
+                lead_id INTEGER,
+                status TEXT NOT NULL DEFAULT 'synced',
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+                UNIQUE (conversation_id, message_id)
+            )"""
+        )
+        _cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bridge_conv_msg ON evohub_kommo_bridge_events(conversation_id, message_id)"
+        )
+        _conn.commit()
+    # --- End EvoHub bridge migration ---
+
     # Fix corrupted datetime columns (NULL or non-string values crash SQLAlchemy)
     for _tbl, _col in [("roles", "created_at"), ("users", "created_at"), ("users", "last_login")]:
         try:
@@ -927,6 +950,9 @@ app.register_blueprint(mcp_servers_bp)
 
 from routes.aurora_bot_control import bp as aurora_bot_control_bp
 app.register_blueprint(aurora_bot_control_bp)
+
+from routes.evohub_kommo_bridge import bp as evohub_kommo_bridge_bp
+app.register_blueprint(evohub_kommo_bridge_bp)
 
 from routes.kiwify_webhook import bp as kiwify_webhook_bp
 app.register_blueprint(kiwify_webhook_bp)
