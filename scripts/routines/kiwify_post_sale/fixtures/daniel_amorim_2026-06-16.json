@@ -1,0 +1,26 @@
+{
+  "kiwify_order_id": "kiwify-damorim-2026-06-16-001",
+  "order_status": "paid",
+  "payment_method": "pix",
+  "created_at": "2026-06-16T10:00:00-03:00",
+  "Customer": {
+    "full_name": "Daniel Amorim",
+    "email": "daniel.amorim@exemplo.com",
+    "mobile": "+5521988887777",
+    "CPF": "00000000000",
+    "city": "Rio de Janeiro",
+    "state": "RJ"
+  },
+  "Product": {
+    "product_id": "kommo-masterflow-2026",
+    "product_name": "Kommo Master Flow",
+    "product_slug": "kommo-masterflow"
+  },
+  "Commissions": {
+    "charge_amount": 143856,
+    "product_base_price": 143856,
+    "kiwify_fee": 0,
+    "commissioned_stores": []
+  },
+  "_fixture_note": "Reproducao manual da venda 16/06 (n8n falhou no mesmo incidente). Substituir pelo payload real do n8n Sheets."
+}

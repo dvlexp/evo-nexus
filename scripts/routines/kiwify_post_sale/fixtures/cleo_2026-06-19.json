@@ -1,0 +1,30 @@
+{
+  "kiwify_order_id": "kiwify-cleo-2026-06-19-001",
+  "order_status": "paid",
+  "payment_method": "credit_card",
+  "created_at": "2026-06-19T17:06:00-03:00",
+  "Customer": {
+    "full_name": "Cleo Rigaud",
+    "email": "cleorigaud@hotmail.com",
+    "mobile": "+5511987654321",
+    "CPF": "00000000000",
+    "city": "Sao Paulo",
+    "state": "SP"
+  },
+  "Product": {
+    "product_id": "kommo-masterflow-2026",
+    "product_name": "Kommo Master Flow",
+    "product_slug": "kommo-masterflow"
+  },
+  "Commissions": {
+    "charge_amount": 143856,
+    "product_base_price": 143856,
+    "kiwify_fee": 0,
+    "commissioned_stores": []
+  },
+  "subscriber": {
+    "full_name": "Sabrina (esposa do comprador)",
+    "email": "sabrina@exemplo.com"
+  },
+  "_fixture_note": "Reproducao manual baseada na descricao da venda real (Daniel relatou no chat). Substituir pelo payload bruto vindo do n8n Sheets quando disponivel."
+}

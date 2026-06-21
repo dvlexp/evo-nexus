@@ -797,6 +797,7 @@ def auth_middleware():
         path in PUBLIC_PATHS
         or path.startswith("/api/docs")
         or path.startswith("/api/triggers/webhook/")
+        or path.startswith("/api/kiwify/webhook")
         or (path.startswith("/api/shares/") and "/view" in path)
         or path.startswith("/api/knowledge/v1/")
     ):
@@ -926,6 +927,9 @@ app.register_blueprint(mcp_servers_bp)
 
 from routes.aurora_bot_control import bp as aurora_bot_control_bp
 app.register_blueprint(aurora_bot_control_bp)
+
+from routes.kiwify_webhook import bp as kiwify_webhook_bp
+app.register_blueprint(kiwify_webhook_bp)
 
 # --------------- Social Auth blueprints ---------------
 from auth.youtube import bp as youtube_auth_bp
