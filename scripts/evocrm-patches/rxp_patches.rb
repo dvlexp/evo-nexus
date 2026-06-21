@@ -736,11 +736,11 @@ Rails.application.config.to_prepare do
           qop = (query_hash['query_operator'] || query_hash[:query_operator]).to_s.strip
           stripped = query_hash.with_indifferent_access.merge('query_operator' => nil)
           result = build_query_string_without_qop_fix(filters, stripped, current_index)
-          qop.present? ? " #{qop} #{result.strip} " : result
+          qop.present? && !@query_string.strip.empty? ? " #{qop} #{result.strip} " : result
         end
       end
     end
-    Rails.logger.info '[RXP_PATCH] ConditionsFilterService#build_query_string -- query_operator leading->prepend v1 (bug 20)'
+    Rails.logger.info '[RXP_PATCH] ConditionsFilterService#build_query_string -- query_operator leading->prepend v2 (bug 20)'
   end
 
 # ===========================================================================
