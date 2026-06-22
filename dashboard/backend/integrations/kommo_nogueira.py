@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 _BASE_URL = os.getenv("NOGUEIRA_KOMMO_BASE_URL", "https://nogueiraresolveadv.kommo.com")
 _TOKEN = os.getenv("NOGUEIRA_KOMMO_TOKEN", "")
-_ACCOUNT_ID = os.getenv("NOGUEIRA_KOMMO_ACCOUNT_ID", "35241960")
+_ACCOUNT_ID = os.environ["NOGUEIRA_KOMMO_ACCOUNT_ID"]
 
 _HEADERS = {
     "Authorization": f"Bearer {_TOKEN}",
