@@ -102,7 +102,7 @@ def load() -> Settings:
         waba_phone_id=req("WABA_RXP_PHONE_NUMBER_ID"),
         waba_token=req("WABA_RXP_TOKEN"),
         telegram_bot_token=req("TELEGRAM_BOT_TOKEN"),
-        telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID", "8860803037"),
+        telegram_chat_id=req("TELEGRAM_CHAT_ID"),
         dashboard_api_token=os.environ.get("DASHBOARD_API_TOKEN", ""),
         dry_run=os.environ.get("KIWIFY_POST_SALE_DRY_RUN", "false").lower() in ("1", "true", "yes"),
     )
