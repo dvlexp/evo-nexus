@@ -140,3 +140,25 @@ memory/raw-transcripts/
 
 # ── Agent runtime state ──
 .claude/agent-status.json
+
+# === Sanitização 2026-06-20: untracked dirs com PII e scripts ad-hoc ===
+/logs/
+/projects/
+/meetings/
+/finance/
+/daily-logs/
+/community/
+/courses/
+/social/
+/strategy/
+/scripts/aurora_recovery/
+/scripts/test/
+/scripts/routines/aurora_company_enrichment.py
+/scripts/routines/aurora_company_enrichment_vps.py
+/scripts/routines/rxp_outbound_*.py
+*.pkl
+yolov8n.pt
+
+# Arquivos lixo de bash escapado (presentes no working tree)
+/))}*
+/=1.9'
