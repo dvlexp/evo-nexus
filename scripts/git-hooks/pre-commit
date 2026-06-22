@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# EvoNexus pre-commit hook (2026-06-22)
+# Runs gitleaks against staged changes. Blocks commit if any secret is found.
+#
+# Install:
+#   bash scripts/git-hooks/install.sh
+#
+# Bypass (NOT for routine use; only for documented false positive):
+#   git commit --no-verify
+
+set -euo pipefail
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "[pre-commit] gitleaks not installed. Install with:"
+    echo "  curl -fsSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz -o /tmp/gitleaks.tgz"
+    echo "  tar -xz -C /tmp -f /tmp/gitleaks.tgz gitleaks"
+    echo "  sudo mv /tmp/gitleaks /usr/local/bin/ && sudo chmod +x /usr/local/bin/gitleaks"
+    echo "[pre-commit] SKIPPING scan (secrets are NOT being checked)."
+    exit 0
+fi
+
+CONFIG_FLAG=""
+if [ -f .gitleaks.toml ]; then
+    CONFIG_FLAG="--config=.gitleaks.toml"
+fi
+
+if ! gitleaks protect --staged $CONFIG_FLAG --no-banner --redact; then
+    echo
+    echo "[pre-commit] BLOCKED - gitleaks detected a potential secret in staged changes."
+    echo "[pre-commit] Remove the secret (replace with os.environ[X]) or, if false positive,"
+    echo "[pre-commit] document the case and bypass with: git commit --no-verify"
+    exit 1
+fi

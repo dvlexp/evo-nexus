@@ -1,0 +1,22 @@
+# EvoNexus pre-commit hooks (2026-06-22)
+#
+# Install:
+#   pip install --user pre-commit
+#   pre-commit install
+#
+# Run manually on all files:
+#   pre-commit run --all-files
+#
+# Bypass (NOT for routine use — only when a known false positive blocks
+# a legitimate commit, and only after documenting the case in the PR):
+#   git commit --no-verify
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+        name: gitleaks (block secrets in staged changes)
+        args:
+          - "--config=.gitleaks.toml"
+          - "--no-banner"

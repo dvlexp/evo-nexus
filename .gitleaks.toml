@@ -1,0 +1,112 @@
+# EvoNexus gitleaks config (2026-06-22)
+# Extends the upstream default ruleset with EvoNexus-specific patterns
+# identified by Vault audit on 2026-06-21.
+#
+# Run manually:   gitleaks detect --source . --config .gitleaks.toml --no-banner
+# Run on staged:  gitleaks protect --staged --source . --config .gitleaks.toml --no-banner
+
+[extend]
+useDefault = true
+
+# === EvoNexus-specific rules ===
+
+[[rules]]
+id = "evonexus-meta-access-token"
+description = "Meta Graph API access token (EAA prefix, used by WABA, Evolution Instagram, EvoHub)"
+regex = '''EAA[A-Za-z0-9]{180,}'''
+tags = ["meta", "waba", "evolution"]
+
+[[rules]]
+id = "evonexus-stripe-live-key"
+description = "Stripe live secret key"
+regex = '''sk_live_[0-9a-zA-Z]{24,}'''
+tags = ["stripe", "payments"]
+
+# NOTE: regex for *_TOKEN/_SECRET/_KEY/_PASSWORD/_PASS/_API_KEY assignments.
+# Excludes UUIDs (8-4-4-4-12) and short slugs to reduce false positives on
+# pipeline/inbox/template IDs that are legitimately public.
+
+[[rules]]
+id = "evonexus-kiwify-token"
+description = "Hardcoded KIWIFY_* secret credential in source"
+regex = '''KIWIFY_(TOKEN|SECRET|API_KEY|PASSWORD|WEBHOOK_SECRET|ACCOUNT_TOKEN)\s*[:=]\s*["'][^"'\s$]{16,}["']'''
+tags = ["kiwify", "rxp"]
+
+[[rules]]
+id = "evonexus-waba-token"
+description = "Hardcoded WABA_* secret credential in source"
+regex = '''WABA_[A-Z_]*(TOKEN|SECRET|API_KEY|ACCESS_TOKEN|APP_SECRET)\s*[:=]\s*["'][^"'\s$]{16,}["']'''
+tags = ["waba", "whatsapp"]
+
+[[rules]]
+id = "evonexus-directus-token"
+description = "Hardcoded DIRECTUS_* secret credential in source"
+regex = '''DIRECTUS_(TOKEN|STATIC_TOKEN|SECRET|API_KEY|ADMIN_TOKEN|PASSWORD)\s*[:=]\s*["'][^"'\s$]{16,}["']'''
+tags = ["directus"]
+
+[[rules]]
+id = "evonexus-evocrm-token"
+description = "Hardcoded EVOCRM_*/EVO_CRM_* secret credential in source"
+regex = '''EVO_?CRM_[A-Z_]*(TOKEN|SECRET|API_KEY|PASSWORD|JWT)\s*[:=]\s*["'][^"'\s$]{16,}["']'''
+tags = ["evocrm"]
+
+[[rules]]
+id = "evonexus-rxp-pg-password"
+description = "Hardcoded RXP_PG_* password/secret in source"
+regex = '''RXP_PG_(PASSWORD|PASS|SECRET)\s*[:=]\s*["'][^"'\s$]{8,}["']'''
+tags = ["rxp", "postgres"]
+
+[[rules]]
+id = "evonexus-aurora-webhook-secret"
+description = "Aurora webhook shared secret leaked into source"
+regex = '''AURORA_WEBHOOK_SECRET\s*[:=]\s*["'][a-f0-9]{32,}["']'''
+tags = ["aurora", "webhook"]
+
+[[rules]]
+id = "evonexus-partenon-secret"
+description = "Partenon (XMACNA) API shared secret leaked into source"
+regex = '''PARTENON_SECRET\s*[:=]\s*["'][A-Za-z0-9+/=]{32,}["']'''
+tags = ["xmacna", "partenon"]
+
+[[rules]]
+id = "evonexus-jwt-triple"
+description = "JWT (header.payload.signature) literal in source"
+regex = '''eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{16,}'''
+tags = ["jwt", "kommo", "evocrm"]
+
+[[rules]]
+id = "evonexus-github-pat"
+description = "GitHub personal access token (classic ghp_ prefix)"
+regex = '''ghp_[A-Za-z0-9]{36,}'''
+tags = ["github"]
+
+[[rules]]
+id = "evonexus-claude-mcp-token"
+description = "Claude MCP token literal (pattern from ClaraVis leak)"
+regex = '''claude-mcp-token-[A-Za-z0-9_-]{16,}'''
+tags = ["claude", "mcp"]
+
+[[rules]]
+id = "evonexus-bearer-literal"
+description = "Hardcoded Bearer token literal in source (string, not header value from env)"
+regex = '''["']Bearer\s+[A-Za-z0-9_\-\.]{20,}["']'''
+tags = ["bearer", "auth"]
+
+# === Allowlist ===
+#
+# Path patterns that gitleaks should ignore. Memory files, audit reports,
+# and rule files MAY legitimately contain past-leak strings as documentation
+# of what was rotated — we don't want the hook to re-flag historical entries
+# already addressed by filter-repo. Add the entry here AFTER filter-repo has
+# scrubbed the relevant SHAs.
+
+[allowlist]
+description = "Ignore documentation, fixtures, and the .env.example template"
+paths = [
+  '''\.env\.example$''',
+  '''workspace/audit/.*\.md$''',
+  '''\.claude/rules/secrets-policy\.md$''',
+  '''\.gitleaks\.toml$''',
+]
+# Allow specific commit hashes (post filter-repo, list any false-positive SHAs here)
+commits = []
