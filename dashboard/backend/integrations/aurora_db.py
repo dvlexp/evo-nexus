@@ -38,17 +38,15 @@ from typing import Any, Iterable, Optional
 
 log = logging.getLogger(__name__)
 
-# Configuracoes de transporte. Sobrescrever via env se necessario.
-SSH_HOST = os.environ.get("RXP_SSH_HOST", "195.200.7.36")
-SSH_PORT = os.environ.get("RXP_SSH_PORT", "2222")
-SSH_USER = os.environ.get("RXP_SSH_USER", "root")
-SSH_KEY = os.environ.get("RXP_SSH_KEY", os.path.expanduser("~/.ssh/vps_rxp_claude"))
-PG_CONTAINER = os.environ.get(
-    "RXP_PG_CONTAINER",
-    "pgvector_pgvector.1.94c93dmmpbvy5zswpqoaz0mae",
-)
-PG_USER = os.environ.get("RXP_PG_USER", "postgres")
-PG_DB = os.environ.get("RXP_PG_DB", "rxp_outbound")
+# Configuracoes de transporte. Todas as RXP_* sao obrigatorias via env
+# para evitar fallback a valores de producao versionados em source.
+SSH_HOST = os.environ["RXP_SSH_HOST"]
+SSH_PORT = os.environ["RXP_SSH_PORT"]
+SSH_USER = os.environ["RXP_SSH_USER"]
+SSH_KEY = os.environ["RXP_SSH_KEY"]
+PG_CONTAINER = os.environ["RXP_PG_CONTAINER"]
+PG_USER = os.environ["RXP_PG_USER"]
+PG_DB = os.environ["RXP_PG_DB"]
 
 
 class AuroraDBError(Exception):
