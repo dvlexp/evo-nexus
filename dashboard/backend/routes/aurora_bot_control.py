@@ -23,15 +23,12 @@ logger = logging.getLogger(__name__)
 bp = Blueprint("aurora_bot_control", __name__)
 
 PARTENON_URL = "https://labs.xmacna.ai/partenon/api/bot-control/pause"
-PARTENON_SECRET = "AqGnlq8HfhRSWGp5UjyCJzTysNZ16Z0Q3cxyuLgUXn8="
+PARTENON_SECRET = os.environ["PARTENON_SECRET"]
 CHATWOOT_ACCOUNT_ID = 99  # numeric ID used by Aurora's self_pause tool
 
-# Secret is mandatory — must be set via env or falls back to default.
+# Secret is mandatory — no fallback. Fail fast on import if env var missing.
 # The same value must be embedded as ?secret=... in the EvoCRM automation webhook URLs.
-_WEBHOOK_SECRET = os.getenv(
-    "AURORA_WEBHOOK_SECRET",
-    "d3ec9dc03dbc4f537543cf566a66e4a34c20131b5ddb6d6e",
-)
+_WEBHOOK_SECRET = os.environ["AURORA_WEBHOOK_SECRET"]
 
 
 def _phone_to_jid(phone: str) -> str | None:
