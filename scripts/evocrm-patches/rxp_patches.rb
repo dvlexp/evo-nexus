@@ -835,4 +835,64 @@ Rails.application.config.to_prepare do
     end
     Rails.logger.info '[RXP_PATCH] Conversations::FilterService#build_condition_query -- assignee_type handler v1 (bug 23)'
   end
+
+# ===========================================================================
+# Bug 24 (v1) -- EvolutionGoHandlers::MessagesUpsert: LID stored as source_id
+# ---------------------------------------------------------------------------
+# EvoGo implemented a LID->JID swap: when sender arrives as @lid, EvoGo swaps
+# so Sender = JID (@s.whatsapp.net) and SenderAlt = LID (@lid).
+# Before the swap, SenderAlt held the real JID -> using it as source_id was
+# correct. After the swap, SenderAlt holds the LID -> source_id stored as LID
+# (e.g. "222221842833426@lid") -> frontend can't parse as phone number ->
+# conversation shows "sem canal" (no channel display).
+# Same bug: build_contact_attributes and update_contact_information set
+# contact.identifier = LID -> set_contact_for_outgoing can't match outgoing
+# echo messages by identifier.
+# Fix: treat @lid values in SenderAlt as opaque device IDs, fall back to the
+# JID-derived phone_number for source_id and identifier.
+# ===========================================================================
+  if defined?(Whatsapp::EvolutionGoHandlers::MessagesUpsert)
+    Whatsapp::EvolutionGoHandlers::MessagesUpsert.module_eval do
+      private
+
+      def determine_source_id(sender_alt_value, phone_number)
+        if sender_alt_value.present? && !sender_alt_value.to_s.include?('@lid')
+          Rails.logger.info "Evolution Go API [RXP] Using SenderAlt '#{sender_alt_value}' as source_id (JID)"
+          sender_alt_value
+        else
+          Rails.logger.info "Evolution Go API [RXP] SenderAlt is LID or blank -- using phone_number '#{phone_number}' as source_id"
+          phone_number
+        end
+      end
+
+      def build_contact_attributes(push_name, phone_number, sender_alt_value, is_whatsapp_number)
+        attributes = { name: push_name }
+        # Only use SenderAlt as identifier when it is a JID, not a LID
+        if sender_alt_value.present? && !sender_alt_value.to_s.include?('@lid')
+          attributes[:identifier] = sender_alt_value
+        end
+        attributes[:phone_number] = "+#{phone_number}" if is_whatsapp_number
+        attributes
+      end
+
+      def update_contact_information(push_name, phone_number, sender_alt_value, is_whatsapp_number)
+        updates = {}
+        updates[:name] = push_name if @contact.name == phone_number && push_name.present?
+
+        jid_alt = sender_alt_value.present? && !sender_alt_value.to_s.include?('@lid')
+        if @contact.identifier.blank? && jid_alt
+          updates[:identifier] = sender_alt_value
+          Rails.logger.info "Evolution Go API [RXP]: Adding identifier #{sender_alt_value} to contact #{@contact.id}"
+        end
+
+        if @contact.phone_number.blank? && is_whatsapp_number
+          updates[:phone_number] = "+#{phone_number}"
+          Rails.logger.info "Evolution Go API [RXP]: Adding phone_number +#{phone_number} to contact #{@contact.id}"
+        end
+
+        @contact.update!(updates) if updates.any?
+      end
+    end
+    Rails.logger.info '[RXP_PATCH] EvolutionGoHandlers::MessagesUpsert -- LID source_id fix (bug 24)'
+  end
 end
