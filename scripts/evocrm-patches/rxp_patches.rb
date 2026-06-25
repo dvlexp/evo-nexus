@@ -796,6 +796,14 @@ Rails.application.config.to_prepare do
 # instead of filtered results.
 # Fix: override build_condition_query to handle assignee_type before delegating
 # to the original method. Uses @filter_values for parameterized 'me' query.
+#
+# NOTE: The real root cause is in the frontend bundle (ChatPage-BV93Mg_x.js).
+# Function _o() in the filter serializer had no case for "assignee_type" --
+# the filter was silently dropped. jo() routes single assignee_type filters to
+# GET /conversations (not POST), so _o() must emit ?assignee_type=value.
+# Frontend fix: added case"assignee_type" to _o() in the bind-mounted bundle.
+# This backend patch still applies when jo() routes to POST /conversations/filter
+# (e.g. multi-filter combinations including assignee_type).
 # ===========================================================================
   if defined?(Conversations::FilterService)
     Conversations::FilterService.module_eval do
