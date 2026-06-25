@@ -785,4 +785,46 @@ Rails.application.config.to_prepare do
     end
     Rails.logger.info '[RXP_PATCH] LabelConcern#index+#create -- render JSON 204->200 (PR #145, bug 22)'
   end
+
+# ===========================================================================
+# Bug 23 (v1) -- Conversations::FilterService assignee_type handler
+# ---------------------------------------------------------------------------
+# The frontend filter modal sends assignee_type as attribute_key with values
+# [me/assigned/unassigned/all]. filter_keys.yml only defines assignee_id ->
+# model_filters['assignee_type'] = nil -> custom_attribute_query returns '' ->
+# InvalidAttribute raised -> controller returns 400 -> frontend shows all convs
+# instead of filtered results.
+# Fix: override build_condition_query to handle assignee_type before delegating
+# to the original method. Uses @filter_values for parameterized 'me' query.
+# ===========================================================================
+  if defined?(Conversations::FilterService)
+    Conversations::FilterService.module_eval do
+      unless method_defined?(:build_condition_query_without_assignee_type_fix)
+        alias_method :build_condition_query_without_assignee_type_fix, :build_condition_query
+
+        def build_condition_query(model_filters, query_hash, current_index)
+          attr_key = (query_hash['attribute_key'] || query_hash[:attribute_key]).to_s
+
+          if attr_key == 'assignee_type'
+            value = ((query_hash['values'] || query_hash[:values]) || []).first.to_s
+            case value
+            when 'me'
+              key = "assignee_type_me_#{current_index}"
+              @filter_values[key] = @user.id
+              "conversations.assignee_id = :#{key}"
+            when 'assigned'
+              'conversations.assignee_id IS NOT NULL'
+            when 'unassigned'
+              'conversations.assignee_id IS NULL'
+            else
+              ''
+            end
+          else
+            build_condition_query_without_assignee_type_fix(model_filters, query_hash, current_index)
+          end
+        end
+      end
+    end
+    Rails.logger.info '[RXP_PATCH] Conversations::FilterService#build_condition_query -- assignee_type handler v1 (bug 23)'
+  end
 end
