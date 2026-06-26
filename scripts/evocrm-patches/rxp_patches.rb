@@ -895,4 +895,92 @@ Rails.application.config.to_prepare do
     end
     Rails.logger.info '[RXP_PATCH] EvolutionGoHandlers::MessagesUpsert -- LID source_id fix (bug 24)'
   end
+
+# ===========================================================================
+# Bug 25 (v2) -- PipelineItemsController#index N+1: stage_movements + contact
+# ---------------------------------------------------------------------------
+# PipelineItem has TWO entity paths:
+#   - conversation-based: pipeline_item.conversation.contact (most items)
+#   - lead-based:         pipeline_item.contact (direct contact_id, no conversation)
+# v1 patch only preloaded contact inside conversation includes -- lead-based
+# items still fired 1 SQL per item.
+#
+# days_in_current_stage calls stage_movements.order(:created_at).last which
+# adds ORDER BY and creates a NEW query scope even when stage_movements is
+# preloaded -- bypassing the batch include entirely.
+#
+# Fix A: add { contact: { avatar_attachment: :blob } } at top level so
+#        lead-based items get batch-loaded too.
+# Fix B: patch PipelineItem#days_in_current_stage to sort in-memory when
+#        the association is already loaded.
+# ===========================================================================
+  if defined?(Api::V1::PipelineItemsController)
+    Api::V1::PipelineItemsController.prepend(Module.new do
+      def index
+        contact_includes = [:labels, { avatar_attachment: :blob }]
+        @pipeline_items = @pipeline.pipeline_items.includes(
+          :pipeline_stage,
+          :stage_movements,
+          { contact: contact_includes },
+          conversation: [
+            :assignee,
+            :team,
+            { contact: contact_includes },
+            { messages: [:attachments, { sender: { avatar_attachment: :blob } }] }
+          ]
+        )
+        apply_filters
+        apply_sorting
+        labels_by_title = Label.all.index_by(&:title)
+        Thread.current[:rxp_labels_by_title] = labels_by_title
+        begin
+          success_response(
+            data: PipelineItemSerializer.serialize_collection(
+              @pipeline_items,
+              include_entity: true,
+              include_labels: true,
+              labels_by_title: labels_by_title
+            ),
+            message: 'Pipeline items retrieved successfully'
+          )
+        ensure
+          Thread.current[:rxp_labels_by_title] = nil
+        end
+      end
+    end)
+    Rails.logger.info '[RXP_PATCH] PipelineItemsController#index -- N+1 fix v3 labels+lead-contact (bug 25)'
+  end
+
+  if defined?(ContactSerializer)
+    ContactSerializer.singleton_class.prepend(Module.new do
+      def serialize(contact, include_labels: true, **options)
+        result = super(contact, include_labels: false, **options)
+        if include_labels
+          labels_by_title = Thread.current[:rxp_labels_by_title]
+          result['labels'] = contact.labels.map do |tag|
+            lbl = labels_by_title ? labels_by_title[tag.name] : Label.find_by(title: tag.name)
+            { name: tag.name, color: lbl&.color || '#1f93ff' }
+          end
+        end
+        result
+      end
+    end)
+    Rails.logger.info '[RXP_PATCH] ContactSerializer -- labels_by_title thread-local (no Label.find_by per tag) (bug 25)'
+  end
+
+  if defined?(PipelineItem)
+    PipelineItem.prepend(Module.new do
+      def days_in_current_stage
+        last_movement = if association(:stage_movements).loaded?
+                          stage_movements.max_by(&:created_at)
+                        else
+                          stage_movements.order(:created_at).last
+                        end
+        start_time = last_movement&.created_at || entered_at
+        ((Time.current - start_time) / 1.day).round
+      end
+    end)
+    Rails.logger.info '[RXP_PATCH] PipelineItem#days_in_current_stage -- in-memory sort when preloaded (bug 25)'
+  end
+
 end
