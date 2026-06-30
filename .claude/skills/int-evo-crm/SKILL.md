@@ -284,3 +284,64 @@ JSON to stdout. List responses include pagination metadata:
 ## Resources
 
 - contacts, conversations, messages, inboxes, pipelines, pipeline_stages, pipeline_items, labels
+
+---
+
+## Contexto Operacional: Inbox Aurora (WABA / Cloud API)
+
+### Identificadores
+
+| Campo | Valor |
+|-------|-------|
+| `inbox_id` | `a987f4cf-93f6-4bc4-a670-2b8b6510f3ad` |
+| `inbox_name` | `aurora` |
+| `provider` | `evolution` (WhatsApp Business API, Cloud API do Meta) |
+| `evolution_instance` | `aurora` em `https://evo.xmacna.ai` |
+| `phone` | `+55 11 94018-9416` |
+
+### Comportamento esperado de status das mensagens
+
+Mensagens outgoing da aurora seguem este ciclo:
+
+```
+sent → delivered (segundos/minutos após envio)
+delivered → read (quando destinatário abre a conversa)
+```
+
+Se uma mensagem aurora permanecer em `sent` por mais de 30 minutos, o webhook chain pode estar quebrado.
+
+### Diagnóstico rápido de mensagens travadas
+
+```bash
+# Listar conversas abertas no inbox aurora
+python3 /mnt/skills/user/int-evo-crm/scripts/evo_crm_client.py conversations \
+  --inbox_id a987f4cf-93f6-4bc4-a670-2b8b6510f3ad --status open
+```
+
+Para verificar saúde do webhook (requer acesso SSH ao VPS):
+```bash
+# Checar config do webhook no Evolution API
+curl -s "https://evo.xmacna.ai/webhook/find/aurora" \
+  -H "apikey: ${EVO_XMACNA_APIKEY}"
+# Esperado: enabled:true, events inclui MESSAGES_UPDATE
+```
+
+### Fix ativo (Bug 26 v2 -- 2026-06-30)
+
+O CRM EvoAI tem um patch em `/opt/evocrm-patches/rxp_patches.rb` que corrige o handler
+`EvolutionHandlers::Helpers#raw_message_id` para a Cloud API (aurora). Sem ele, todos os
+status updates de aurora são descartados silenciosamente.
+
+Root cause: Evolution API v2 envia `messageId` (ID interno do Prisma, inutil no CRM) e
+`keyId` (wamid real = `source_id` no CRM). O handler original preferia `messageId`, que
+nunca casa com nenhuma mensagem. O patch inverte para preferir `keyId`.
+
+Verificar se o patch está ativo:
+```bash
+# No VPS (SSH):
+docker logs --since 5m <sidekiq-container> | grep "Bug 26 v2"
+# Esperado: [RXP_PATCH] Bug 26 v2 -- EvolutionHandlers#raw_message_id keyId>messageId fix
+```
+
+Para mais detalhes, ver:
+`workspace/development/debug/[C]relatorio-bug26-aurora-messages-update.md`
