@@ -983,4 +983,31 @@ Rails.application.config.to_prepare do
     Rails.logger.info '[RXP_PATCH] PipelineItem#days_in_current_stage -- in-memory sort when preloaded (bug 25)'
   end
 
+  # ===========================================================================
+  # Bug 26 -- Aurora: mensagem fora da janela 24h fica em "enviando" para sempre
+  # Root cause: send_template_message retorna nil silenciosamente quando
+  # processable_channel_message_template retorna name.blank? (sem template
+  # disponivel), sem atualizar o status da mensagem para :failed.
+  # Fix: interceptar o blank? e disparar StatusUpdateService antes do return.
+  # ===========================================================================
+  if defined?(Whatsapp::SendOnWhatsappService)
+    Whatsapp::SendOnWhatsappService.prepend(Module.new do
+      private
+
+      def send_template_message
+        name, _namespace, _lang_code, _params = processable_channel_message_template
+        if name.blank?
+          Messages::StatusUpdateService.new(
+            message,
+            'failed',
+            'Fora da janela de 24h — nenhum template disponivel para esta mensagem'
+          ).perform
+          return
+        end
+        super
+      end
+    end)
+    Rails.logger.info '[RXP_PATCH] SendOnWhatsappService#send_template_message -- status:failed when no template (bug 26)'
+  end
+
 end
