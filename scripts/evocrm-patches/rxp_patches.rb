@@ -1011,3 +1011,19 @@ Rails.application.config.to_prepare do
   end
 
 end
+
+# ===========================================================================
+# Bug 27 -- Filtro de conversas perdido ao paginar (scroll infinito)
+# Root cause: loadMoreConversations sempre chama GET /conversations?page=N
+# sem os filtros ativos, mesmo quando a carga inicial foi feita via
+# POST /conversations/filter. Resultado: página 2+ traz conversas sem filtro.
+#
+# Fix (frontend JS — /opt/evocrm-patches/assets/ChatPage-BV93Mg_x.js):
+#   1. filterConversations() armazena o corpo do filtro em window._rxpFilterBody
+#   2. getConversations() quando page>1 e _rxpFilterBody presente redireciona
+#      para POST /conversations/filter com page, garantindo filtro preservado.
+#   3. _rxpFilterBody é limpo quando page===1 (nova busca sem filtro).
+#
+# Patch aplicado em: /opt/evocrm-patches/assets/ChatPage-BV93Mg_x.js
+# Backup em: ChatPage-BV93Mg_x.js.bak-bug27
+# ===========================================================================
