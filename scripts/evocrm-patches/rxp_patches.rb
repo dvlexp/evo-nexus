@@ -984,31 +984,24 @@ Rails.application.config.to_prepare do
   end
 
   # ===========================================================================
-  # Bug 26 -- Aurora: mensagem fora da janela 24h fica em "enviando" para sempre
-  # Root cause: send_template_message retorna nil silenciosamente quando
-  # processable_channel_message_template retorna name.blank? (sem template
-  # disponivel), sem atualizar o status da mensagem para :failed.
-  # Fix: interceptar o blank? e disparar StatusUpdateService antes do return.
+  # Bug 26 -- Aurora (WHATSAPP-BUSINESS): todas mensagens ficavam em "sent"
+  # Root cause: Evolution API v2.3.7 em evo.xmacna.ai tinha Chatwoot
+  # integration ativa para a instância aurora. Com Chatwoot integration
+  # ativa, a API roteia eventos (incluindo MESSAGES_UPDATE) via Chatwoot
+  # API direta (/api/v1/accounts/{uuid}/...) que retorna 404 porque o CRM
+  # fork usa UUID-based IDs mas sem os routes correspondentes. O webhook
+  # padrão (/webhooks/whatsapp/evolution) nunca era chamado para
+  # MESSAGES_UPDATE — logo, nenhuma mensagem progredia de sent→delivered/read.
+  #
+  # Fix aplicado (2026-06-30, fora do código Ruby): Chatwoot integration
+  # desabilitada em evo.xmacna.ai via POST /chatwoot/set/aurora com
+  # enabled:false. Todos os eventos agora fluem pelo webhook padrão
+  # que o CRM já processa corretamente via EvolutionHandlers::MessagesUpdate.
+  #
+  # Verificação: teste com payload MESSAGES_UPDATE manual atualizou
+  # message.status de :sent para :delivered (source_id: 3EB0E3E41440F40EF0A193).
   # ===========================================================================
-  if defined?(Whatsapp::SendOnWhatsappService)
-    Whatsapp::SendOnWhatsappService.prepend(Module.new do
-      private
-
-      def send_template_message
-        name, _namespace, _lang_code, _params = processable_channel_message_template
-        if name.blank?
-          Messages::StatusUpdateService.new(
-            message,
-            'failed',
-            'Fora da janela de 24h — nenhum template disponivel para esta mensagem'
-          ).perform
-          return
-        end
-        super
-      end
-    end)
-    Rails.logger.info '[RXP_PATCH] SendOnWhatsappService#send_template_message -- status:failed when no template (bug 26)'
-  end
+  Rails.logger.info '[RXP_PATCH] Bug 26 -- Chatwoot integration desabilitada em evo.xmacna.ai (fix externo, 2026-06-30)'
 
 end
 
