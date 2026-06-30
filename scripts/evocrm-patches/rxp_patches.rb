@@ -984,24 +984,36 @@ Rails.application.config.to_prepare do
   end
 
   # ===========================================================================
-  # Bug 26 -- Aurora (WHATSAPP-BUSINESS): todas mensagens ficavam em "sent"
-  # Root cause: Evolution API v2.3.7 em evo.xmacna.ai tinha Chatwoot
-  # integration ativa para a instância aurora. Com Chatwoot integration
-  # ativa, a API roteia eventos (incluindo MESSAGES_UPDATE) via Chatwoot
-  # API direta (/api/v1/accounts/{uuid}/...) que retorna 404 porque o CRM
-  # fork usa UUID-based IDs mas sem os routes correspondentes. O webhook
-  # padrão (/webhooks/whatsapp/evolution) nunca era chamado para
-  # MESSAGES_UPDATE — logo, nenhuma mensagem progredia de sent→delivered/read.
+  # Bug 26 (v2 -- fix definitivo) -- Aurora MESSAGES_UPDATE: raw_message_id
+  # usava :messageId (ID interno do Prisma do evo.xmacna.ai) em vez de :keyId
+  # (wamid real = source_id no CRM).
   #
-  # Fix aplicado (2026-06-30, fora do código Ruby): Chatwoot integration
-  # desabilitada em evo.xmacna.ai via POST /chatwoot/set/aurora com
-  # enabled:false. Todos os eventos agora fluem pelo webhook padrão
-  # que o CRM já processa corretamente via EvolutionHandlers::MessagesUpdate.
+  # Fluxo do evento messages.update recebido do Evolution API v2 (Cloud API):
+  #   data.messageId = "cmqs7ozt705cepl01mlhe3z42"  <- Prisma ID (inutil aqui)
+  #   data.keyId     = "wamid.HBgM..."              <- wamid = source_id do CRM
   #
-  # Verificação: teste com payload MESSAGES_UPDATE manual atualizou
-  # message.status de :sent para :delivered (source_id: 3EB0E3E41440F40EF0A193).
+  # Com a prioridade errada (:messageId primeiro), find_message_by_source_id
+  # nunca encontrava a mensagem e logava "Message not found for update: cmqs7..."
+  # O evento chegava ao CRM mas era descartado silenciosamente.
+  #
+  # Fix: inverter prioridade -- :keyId primeiro, :messageId como fallback.
+  # Seguro: para messages.upsert, nenhum dos dois existe e o fallback
+  # @raw_message.dig(:key, :id) continua funcionando normalmente.
+  #
+  # Verificacao: payload de teste em 2026-06-30 confirmou que apos o fix
+  # o evento chega, o lookup por keyId encontra a mensagem e o status atualiza.
   # ===========================================================================
-  Rails.logger.info '[RXP_PATCH] Bug 26 -- Chatwoot integration desabilitada em evo.xmacna.ai (fix externo, 2026-06-30)'
+  if defined?(Whatsapp::EvolutionHandlers::Helpers)
+    Whatsapp::EvolutionHandlers::Helpers.module_eval do
+      unless private_method_defined?(:raw_message_id_without_keyid_fix)
+        alias_method :raw_message_id_without_keyid_fix, :raw_message_id
+        def raw_message_id
+          @raw_message[:keyId] || @raw_message[:messageId] || @raw_message.dig(:key, :id)
+        end
+      end
+    end
+    Rails.logger.info '[RXP_PATCH] Bug 26 v2 -- EvolutionHandlers#raw_message_id keyId>messageId fix (MESSAGES_UPDATE aurora)'
+  end
 
 end
 
