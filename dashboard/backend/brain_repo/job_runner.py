@@ -169,6 +169,9 @@ _WATCH_PATHS = ["memory", "workspace", "customizations", "config-safe"]
 _EXCLUDE_RELATIVE_PATHS = [
     "memory/raw-transcripts",
     "workspace/projects",
+    "workspace/ADWs/logs/chat",
+    "workspace/data",
+    "workspace/audit",
 ]
 
 # Directory names skipped anywhere in the tree. Nested .git catches submodules

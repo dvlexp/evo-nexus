@@ -32,8 +32,8 @@ PATTERNS: list[tuple[str, str]] = [
 ]
 
 _CHECKED_EXTENSIONS = {
-    ".py", ".env", ".yaml", ".yml", ".json", ".txt", ".md",
-    ".sh", ".conf", ".ini", ".cfg",
+    ".py", ".env", ".yaml", ".yml", ".json", ".jsonl", ".txt", ".md",
+    ".sh", ".conf", ".ini", ".cfg", ".log", ".csv", ".tsv",
 }
 
 _AUTO_EXCLUDE_PARTS = {".git", "__pycache__", ".venv", "node_modules"}

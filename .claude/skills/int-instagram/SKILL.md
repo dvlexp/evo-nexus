@@ -17,6 +17,47 @@ SOCIAL_INSTAGRAM_1_ACCOUNT_ID=YOUR_ACCOUNT_ID
 SOCIAL_INSTAGRAM_1_PAGE_TOKEN=YOUR_PAGE_TOKEN
 ```
 
+## Setup alternativo — EvoHub Proxy
+
+Caminho alternativo via proxy EvoHub (`https://api.evohub.ai/meta`), util quando nao se quer manter o app OAuth do Social Auth ou quando ja existe um token de canal EvoHub provisionado.
+
+**Configuracao no `.env`:**
+- `EVOHUB_INSTAGRAM_TOKEN` — token de canal do EvoHub (NAO copiar o valor literal; sempre referenciar a env var)
+- `EVOHUB_INSTAGRAM_ID=26802799379390086` — Instagram Business Account ID
+
+**Conta atualmente conectada:** `@danielvalladaresexp` (Daniel Valladares) — account type `MEDIA_CREATOR`.
+
+**Base URL:** `https://api.evohub.ai/meta`
+**Auth header:** `Authorization: Bearer {EVOHUB_INSTAGRAM_TOKEN}`
+
+O proxy converte o token de canal automaticamente para o token Meta apropriado e aceita qualquer endpoint da Meta Graph API v23.0 (basta substituir `https://graph.facebook.com/v23.0` por `https://api.evohub.ai/meta`).
+
+### Exemplos curl
+
+```bash
+# Perfil
+curl -s -H "Authorization: Bearer $EVOHUB_INSTAGRAM_TOKEN" \
+  "https://api.evohub.ai/meta/v23.0/$EVOHUB_INSTAGRAM_ID?fields=id,username,name,account_type,followers_count,media_count"
+
+# Conversas (DMs)
+curl -s -H "Authorization: Bearer $EVOHUB_INSTAGRAM_TOKEN" \
+  "https://api.evohub.ai/meta/v23.0/$EVOHUB_INSTAGRAM_ID/conversations?platform=instagram&fields=id,updated_time,participants"
+
+# Send message (responder DM)
+curl -s -X POST -H "Authorization: Bearer $EVOHUB_INSTAGRAM_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"recipient":{"id":"IGSID_DO_DESTINATARIO"},"message":{"text":"Ola!"}}' \
+  "https://api.evohub.ai/meta/v23.0/$EVOHUB_INSTAGRAM_ID/messages"
+```
+
+### Helpers prontos
+
+Existe skill dedicada `custom-int-evohub-instagram` com helpers Python (perfil, conversas, send message, insights). Para uso programatico, prefira essa skill em vez de montar curl na mao.
+
+### Limitacao atual
+
+A conta `@danielvalladaresexp` esta como `MEDIA_CREATOR`, o que **bloqueia publish** (criacao de posts/reels/stories via API). Leitura de perfil, conversas e insights funciona normalmente. Para habilitar publish, e necessario migrar a conta para `BUSINESS`.
+
 ## API Client
 
 ```bash

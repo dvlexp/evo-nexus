@@ -872,3 +872,159 @@ def test_integration(name: str):
 
     # Passthrough for integrations without a dedicated test
     return jsonify({"ok": True, "message": "Nenhum teste disponível para esta integração"}), 200
+
+
+# ---------------------------------------------------------------------------
+# Kommo Redigir — proxy para atualização de lead via HTML interno (SDR)
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/integrations/kommo/redigir/update-lead", methods=["POST"])
+def kommo_redigir_update_lead():
+    """Proxy server-side para atualizar lead + contato + nota na Kommo da Redigir.
+
+    Chamado pelo roteiro-sdr-redigir-flow.html via fetch com Authorization: Bearer <DASHBOARD_API_TOKEN>.
+    Body JSON: { lead_id, escola, cidade, tel, email, contato_nome, cargo, canais,
+                 resultado, obs, data_reuniao, hora_reuniao, data_retorno, qualificacao, duracao }
+    """
+    from flask_login import login_required, current_user  # noqa: F811
+
+    token = os.environ.get("REDIGIR_KOMMO_TOKEN", "").strip()
+    base_url = os.environ.get("REDIGIR_KOMMO_BASE_URL", "").strip().rstrip("/")
+    if not token or not base_url:
+        return jsonify({"ok": False, "error": "REDIGIR_KOMMO_TOKEN ou REDIGIR_KOMMO_BASE_URL não configurados"}), 500
+
+    data = request.get_json(silent=True) or {}
+    lead_id = str(data.get("lead_id", "")).strip()
+    if not lead_id or not lead_id.isdigit():
+        return jsonify({"ok": False, "error": "lead_id inválido — informe um número inteiro"}), 400
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    api = f"{base_url}/api/v4"
+
+    # 1. Buscar lead para obter main_contact_id
+    try:
+        r = http.get(f"{api}/leads/{lead_id}?with=contacts", headers=headers, timeout=10)
+        if r.status_code == 404:
+            return jsonify({"ok": False, "error": f"Lead #{lead_id} não encontrado na Kommo"}), 404
+        if r.status_code != 200:
+            return jsonify({"ok": False, "error": f"Kommo retornou {r.status_code} ao buscar lead"}), 502
+        lead = r.json()
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Erro ao conectar na Kommo: {e}"}), 502
+
+    main_contact_id = None
+    try:
+        embedded = lead.get("_embedded", {})
+        contacts = embedded.get("contacts", [])
+        for c in contacts:
+            if c.get("is_main"):
+                main_contact_id = c["id"]
+                break
+        if main_contact_id is None and contacts:
+            main_contact_id = contacts[0]["id"]
+    except Exception:
+        pass
+
+    escola = data.get("escola", "").strip()
+    cidade = data.get("cidade", "").strip()
+    tel = data.get("tel", "").strip()
+    email = data.get("email", "").strip()
+    contato_nome = data.get("contato_nome", "").strip()
+    cargo = data.get("cargo", "").strip()
+    canais = data.get("canais", [])
+    resultado = data.get("resultado", "")
+    obs = data.get("obs", "").strip()
+    data_reuniao = data.get("data_reuniao", "")
+    hora_reuniao = data.get("hora_reuniao", "")
+    data_retorno = data.get("data_retorno", "")
+    qualificacao = data.get("qualificacao", "")
+    duracao = data.get("duracao", "")
+
+    resultado_labels = {
+        "reuniao": "Reuniao agendada",
+        "material": "Enviar material + retornar",
+        "retornar": "Retornar em outro periodo",
+        "sem-interesse": "Sem interesse",
+        "nao-falou": "Nao conseguiu falar",
+    }
+
+    errors = []
+
+    # 2. Atualizar nome do lead (escola) se informado
+    if escola:
+        try:
+            patch_lead = {"name": escola}
+            r = http.patch(f"{api}/leads/{lead_id}", headers=headers, json=patch_lead, timeout=10)
+            if r.status_code not in (200, 201):
+                errors.append(f"Atualização do lead falhou ({r.status_code})")
+        except Exception as e:
+            errors.append(f"Erro ao atualizar lead: {e}")
+
+    # 3. Atualizar contato principal (nome, telefone, e-mail)
+    if main_contact_id and (contato_nome or tel or email):
+        patch_contact: dict = {}
+        if contato_nome:
+            patch_contact["name"] = contato_nome
+        custom_fields = []
+        if tel:
+            custom_fields.append({"field_code": "PHONE", "values": [{"value": tel, "enum_code": "WORK"}]})
+        if email:
+            custom_fields.append({"field_code": "EMAIL", "values": [{"value": email, "enum_code": "WORK"}]})
+        if custom_fields:
+            patch_contact["custom_fields_values"] = custom_fields
+        try:
+            r = http.patch(f"{api}/contacts/{main_contact_id}", headers=headers, json=patch_contact, timeout=10)
+            if r.status_code not in (200, 201):
+                errors.append(f"Atualização do contato falhou ({r.status_code})")
+        except Exception as e:
+            errors.append(f"Erro ao atualizar contato: {e}")
+
+    # 4. Adicionar nota com resumo da ligacao
+    res_label = resultado_labels.get(resultado, resultado)
+    canais_str = ", ".join(canais) if canais else "-"
+
+    nota_lines = [
+        "=== REGISTRO SDR — REDIGIR ===",
+        f"Data: {__import__('datetime').date.today().strftime('%d/%m/%Y')}",
+        f"Duracao: {duracao}" if duracao else "",
+        "",
+        f"Escola: {escola or '-'}",
+        f"Cidade: {cidade or '-'}",
+        f"Telefone: {tel or '-'}",
+        f"E-mail: {email or '-'}",
+        "",
+        f"Contato: {contato_nome or '-'}",
+        f"Cargo: {cargo or '-'}",
+        f"Canal preferido: {canais_str}",
+        "",
+        f"Resultado: {res_label or '-'}",
+    ]
+    if resultado == "reuniao" and (data_reuniao or hora_reuniao):
+        nota_lines.append(f"Reuniao: {data_reuniao} {hora_reuniao}".strip())
+    if resultado == "retornar" and data_retorno:
+        nota_lines.append(f"Retorno: {data_retorno}")
+    if obs:
+        nota_lines.append("")
+        nota_lines.append(f"Observacoes: {obs}")
+    if qualificacao:
+        nota_lines.append("")
+        nota_lines.append(f"Qualificacao: {qualificacao}")
+
+    nota_text = "\n".join(l for l in nota_lines if l is not None)
+
+    try:
+        note_payload = [{"note_type": "common", "text": nota_text}]
+        r = http.post(f"{api}/leads/{lead_id}/notes", headers=headers, json=note_payload, timeout=10)
+        if r.status_code not in (200, 201):
+            errors.append(f"Nota nao adicionada ({r.status_code})")
+    except Exception as e:
+        errors.append(f"Erro ao criar nota: {e}")
+
+    if errors:
+        return jsonify({"ok": False, "error": "; ".join(errors), "partial": True}), 207
+
+    contact_info = f" | Contato #{main_contact_id}" if main_contact_id else ""
+    return jsonify({"ok": True, "message": f"Lead #{lead_id}{contact_info} atualizado com sucesso"})

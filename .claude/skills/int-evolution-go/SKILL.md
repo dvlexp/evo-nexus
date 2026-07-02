@@ -85,6 +85,29 @@ python3 /mnt/skills/user/int-evolution-go/scripts/evolution_go_client.py delete_
 python3 /mnt/skills/user/int-evolution-go/scripts/evolution_go_client.py summary
 ```
 
+## Export Contacts
+
+List or export the address book of a specific instance. Useful for backups, audience builds, and outbound campaigns.
+
+```bash
+# 1. Print as JSON (default)
+python3 /mnt/skills/user/int-evolution-go/scripts/evolution_go_client.py contacts dvl
+
+# 2. Export to CSV (UTF-8 with BOM, Excel-friendly for accents)
+python3 /mnt/skills/user/int-evolution-go/scripts/evolution_go_client.py contacts dvl --output csv:/tmp/dvl-contacts.csv
+
+# 3. Export to a new Google Sheet (requires Google OAuth env vars)
+python3 /mnt/skills/user/int-evolution-go/scripts/evolution_go_client.py contacts dvl --output gsheet:"DVL Contacts 2026-06"
+```
+
+### Notes
+
+- **Per-instance token**: `contacts` is an instance-scoped endpoint. The client looks up the instance's own token via `/instance/all` (matched by `name`) and uses that as the `apikey` header — NOT the global `EVOLUTION_GO_KEY`.
+- If the instance name is unknown the client errors with the list of available instances.
+- A warning is printed (stderr) if the instance is disconnected, but the export still proceeds — cached contacts may exist.
+- **CSV schema** (5 columns, lowercase snake_case): `jid, first_name, full_name, push_name, business_name`. Empty values are blank (not `None`).
+- **Google Sheets**: uses the workspace OAuth refresh token (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`). Scopes requested: `spreadsheets` + `drive.file`. The created sheet is owned by the OAuth account.
+
 ## Send Messages
 
 ### Send text message

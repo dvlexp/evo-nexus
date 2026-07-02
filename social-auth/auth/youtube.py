@@ -80,7 +80,7 @@ def oauth_start():
         "client_id": client_id,
         "redirect_uri": _redirect_uri(),
         "response_type": "code",
-        "scope": "https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/yt-analytics.readonly",
+        "scope": "https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl https://www.googleapis.com/auth/yt-analytics.readonly",
         "access_type": "offline",
         "state": state,
         "prompt": "consent",

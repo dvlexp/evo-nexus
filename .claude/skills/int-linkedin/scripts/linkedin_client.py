@@ -196,6 +196,95 @@ def all_accounts_summary() -> dict:
     return {"accounts": summaries, "total": len(summaries)}
 
 
+def post_text(account: dict, text: str, visibility: str = "PUBLIC") -> dict:
+    """Publish a text-only post to LinkedIn using UGC Posts API."""
+    token = account.get("access_token", "")
+    person_urn = account.get("person_urn", "")
+    if not token or not person_urn:
+        return {"error": "No access token or person URN"}
+
+    url = "https://api.linkedin.com/v2/ugcPosts"
+    payload = {
+        "author": person_urn,
+        "lifecycleState": "PUBLISHED",
+        "specificContent": {
+            "com.linkedin.ugc.ShareContent": {
+                "shareCommentary": {"text": text},
+                "shareMediaCategory": "NONE",
+            }
+        },
+        "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": visibility},
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST", headers={
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            post_id = resp.headers.get("x-restli-id", "")
+            body = resp.read().decode("utf-8") or "{}"
+            return {
+                "ok": True,
+                "post_id": post_id,
+                "post_url": f"https://www.linkedin.com/feed/update/{post_id}/" if post_id else "",
+                "response": json.loads(body) if body.strip().startswith("{") else body,
+            }
+    except urllib.error.HTTPError as e:
+        return {"error": f"HTTP {e.code}", "detail": e.read().decode("utf-8", "replace")[:500]}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def post_article(account: dict, text: str, article_url: str, title: str = "", description: str = "", visibility: str = "PUBLIC") -> dict:
+    """Publish a post with an article link (auto-renders preview card)."""
+    token = account.get("access_token", "")
+    person_urn = account.get("person_urn", "")
+    if not token or not person_urn:
+        return {"error": "No access token or person URN"}
+
+    media = {"status": "READY", "originalUrl": article_url}
+    if title:
+        media["title"] = {"text": title}
+    if description:
+        media["description"] = {"text": description}
+
+    url = "https://api.linkedin.com/v2/ugcPosts"
+    payload = {
+        "author": person_urn,
+        "lifecycleState": "PUBLISHED",
+        "specificContent": {
+            "com.linkedin.ugc.ShareContent": {
+                "shareCommentary": {"text": text},
+                "shareMediaCategory": "ARTICLE",
+                "media": [media],
+            }
+        },
+        "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": visibility},
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST", headers={
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            post_id = resp.headers.get("x-restli-id", "")
+            body = resp.read().decode("utf-8") or "{}"
+            return {
+                "ok": True,
+                "post_id": post_id,
+                "post_url": f"https://www.linkedin.com/feed/update/{post_id}/" if post_id else "",
+                "response": json.loads(body) if body.strip().startswith("{") else body,
+            }
+    except urllib.error.HTTPError as e:
+        return {"error": f"HTTP {e.code}", "detail": e.read().decode("utf-8", "replace")[:500]}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # ── CLI ──────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -208,6 +297,8 @@ if __name__ == "__main__":
         print("  post_stats POST_URN         # Reactions/comments for a post")
         print("  org_followers [account]     # Org follower stats (needs Advertising API)")
         print("  summary                     # Summary of all accounts")
+        print("  post_text [account] --text TEXT [--visibility PUBLIC|CONNECTIONS]")
+        print("  post_article [account] --text TEXT --url URL [--title T] [--description D]")
         sys.exit(1)
 
     cmd = sys.argv[1]
@@ -233,6 +324,34 @@ if __name__ == "__main__":
             result = org_followers(acc)
         elif cmd == "summary":
             result = all_accounts_summary()
+        elif cmd == "post_text":
+            # post_text [account] --text TEXT [--visibility V]
+            acc_label = args[0] if args and not args[0].startswith("--") else None
+            acc = _get_account(acc_label)
+            text = ""
+            visibility = "PUBLIC"
+            i = 0
+            while i < len(args):
+                if args[i] == "--text":
+                    text = args[i+1]; i += 2
+                elif args[i] == "--visibility":
+                    visibility = args[i+1]; i += 2
+                else:
+                    i += 1
+            result = post_text(acc, text, visibility)
+        elif cmd == "post_article":
+            acc_label = args[0] if args and not args[0].startswith("--") else None
+            acc = _get_account(acc_label)
+            text = ""; url_a = ""; title = ""; description = ""; visibility = "PUBLIC"
+            i = 0
+            while i < len(args):
+                if args[i] == "--text": text = args[i+1]; i += 2
+                elif args[i] == "--url": url_a = args[i+1]; i += 2
+                elif args[i] == "--title": title = args[i+1]; i += 2
+                elif args[i] == "--description": description = args[i+1]; i += 2
+                elif args[i] == "--visibility": visibility = args[i+1]; i += 2
+                else: i += 1
+            result = post_article(acc, text, url_a, title, description, visibility)
         else:
             print(f"Unknown command: {cmd}")
             sys.exit(1)

@@ -451,7 +451,6 @@ def send_telegram(text: str, chat_id: str = None) -> bool:
     Returns True if sent successfully, False otherwise.
     """
     import urllib.request
-    import urllib.parse
 
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     cid = chat_id or os.environ.get("TELEGRAM_CHAT_ID", "")
@@ -460,9 +459,9 @@ def send_telegram(text: str, chat_id: str = None) -> bool:
         return False
 
     try:
-        payload = urllib.parse.urlencode({"chat_id": cid, "text": text, "parse_mode": "HTML"}).encode()
+        payload = json.dumps({"chat_id": cid, "text": text, "parse_mode": "HTML"}).encode("utf-8")
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        req = urllib.request.Request(url, data=payload, method="POST")
+        req = urllib.request.Request(url, data=payload, method="POST", headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=10) as resp:
             ok = resp.status == 200
         if ok:

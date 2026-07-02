@@ -336,7 +336,7 @@ def top_videos(account: dict, max_results: int = 10) -> dict:
 
 
 def comments(account: dict, video_id: str, max_results: int = 20) -> dict:
-    """Get recent comments on a video."""
+    """Get recent comments on a video, flagging unanswered ones."""
     data = _api_get("commentThreads", {
         "part": "snippet",
         "videoId": video_id,
@@ -348,16 +348,31 @@ def comments(account: dict, video_id: str, max_results: int = 20) -> dict:
         return data
 
     result = []
+    unanswered = []
     for item in data.get("items", []):
-        c = item.get("snippet", {}).get("topLevelComment", {}).get("snippet", {})
-        result.append({
+        s = item.get("snippet", {})
+        c = s.get("topLevelComment", {}).get("snippet", {})
+        reply_count = s.get("totalReplyCount", 0)
+        entry = {
+            "id": item.get("id", ""),
             "author": c.get("authorDisplayName", ""),
             "text": c.get("textDisplay", "")[:300],
             "likes": c.get("likeCount", 0),
             "published": c.get("publishedAt", ""),
-        })
+            "reply_count": reply_count,
+            "answered": reply_count > 0,
+        }
+        result.append(entry)
+        if reply_count == 0:
+            unanswered.append(entry)
 
-    return {"video_id": video_id, "comments": result, "total": len(result)}
+    return {
+        "video_id": video_id,
+        "comments": result,
+        "unanswered": unanswered,
+        "total": len(result),
+        "total_unanswered": len(unanswered),
+    }
 
 
 def all_accounts_summary() -> dict:

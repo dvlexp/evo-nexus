@@ -4,6 +4,7 @@ Evolution Go client - calls the Evolution Go REST API directly.
 No third-party SDK dependency.
 """
 import argparse
+import csv
 import json
 import os
 import sys
@@ -43,8 +44,13 @@ def get_config():
     return url.rstrip("/"), key
 
 
-def api_request(method, path, data=None):
-    """Make an HTTP request to the Evolution Go API."""
+def api_request(method, path, data=None, apikey_override=None):
+    """Make an HTTP request to the Evolution Go API.
+
+    apikey_override: when set, use this apikey instead of the global EVOLUTION_GO_KEY.
+    Required for instance-scoped endpoints (e.g. /user/contacts) where each instance
+    has its own token from /instance/all.
+    """
     base_url, api_key = get_config()
     url = f"{base_url}{path}"
 
@@ -54,7 +60,7 @@ def api_request(method, path, data=None):
         data=body,
         method=method,
         headers={
-            "apikey": api_key,
+            "apikey": apikey_override or api_key,
             "Content-Type": "application/json",
         },
     )
@@ -348,6 +354,165 @@ def cmd_set_presence(args):
     print(json.dumps(result, indent=2))
 
 
+# ── Contacts (instance-scoped) ───────────────────────────────────────
+
+CONTACT_COLUMNS = ["jid", "first_name", "full_name", "push_name", "business_name"]
+
+
+def _resolve_instance_token(instance_name):
+    """Look up the per-instance token from /instance/all. Returns (token, connected)."""
+    result = api_request("GET", "/instance/all")
+    instances = result.get("data") if isinstance(result, dict) else result
+    if not isinstance(instances, list):
+        print(json.dumps({"error": "Unexpected /instance/all response shape"}))
+        sys.exit(1)
+    for inst in instances:
+        name = inst.get("name") or inst.get("instanceName")
+        if name == instance_name:
+            token = inst.get("token")
+            if not token:
+                print(json.dumps({"error": f"Instance '{instance_name}' has no token field"}))
+                sys.exit(1)
+            return token, bool(inst.get("connected"))
+    available = sorted({inst.get("name") or inst.get("instanceName") or "?" for inst in instances})
+    print(json.dumps({
+        "error": f"Instance '{instance_name}' not found",
+        "available": available,
+    }, indent=2))
+    sys.exit(1)
+
+
+def _normalize_contacts(raw_list):
+    """Map upstream Pascal-case fields to snake_case columns; replace None with ''."""
+    rows = []
+    for c in raw_list or []:
+        if not isinstance(c, dict):
+            continue
+        rows.append({
+            "jid": c.get("Jid") or "",
+            "first_name": c.get("FirstName") or "",
+            "full_name": c.get("FullName") or "",
+            "push_name": c.get("PushName") or "",
+            "business_name": c.get("BusinessName") or "",
+        })
+    return rows
+
+
+def _write_contacts_csv(rows, output_path):
+    path = Path(output_path).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # utf-8-sig so Excel opens accents correctly
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=CONTACT_COLUMNS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+    return path
+
+
+def _write_contacts_gsheet(rows, title):
+    """Create a new Google Sheet using GOOGLE_REFRESH_TOKEN OAuth flow. Returns URL."""
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+    refresh_token = os.environ.get("GOOGLE_REFRESH_TOKEN")
+    missing = [k for k, v in [
+        ("GOOGLE_CLIENT_ID", client_id),
+        ("GOOGLE_CLIENT_SECRET", client_secret),
+        ("GOOGLE_REFRESH_TOKEN", refresh_token),
+    ] if not v]
+    if missing:
+        print(json.dumps({
+            "error": "Google Sheets requires OAuth credentials",
+            "missing_env": missing,
+            "hint": "Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN in .env",
+        }, indent=2))
+        sys.exit(2)
+    try:
+        import gspread
+        from google.oauth2.credentials import Credentials
+    except ImportError as e:
+        print(json.dumps({
+            "error": "Missing Python package",
+            "details": str(e),
+            "hint": "pip install gspread google-auth",
+        }))
+        sys.exit(2)
+
+    creds = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=[
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive.file",
+        ],
+    )
+    gc = gspread.authorize(creds)
+    sh = gc.create(title)
+    ws = sh.sheet1
+    # Pre-size to avoid per-append round-trips
+    needed_rows = max(len(rows) + 1, 1)
+    if needed_rows > ws.row_count or len(CONTACT_COLUMNS) > ws.col_count:
+        ws.resize(rows=max(needed_rows, 1000), cols=max(len(CONTACT_COLUMNS), 5))
+    values = [CONTACT_COLUMNS] + [[r[c] for c in CONTACT_COLUMNS] for r in rows]
+    ws.update(range_name="A1", values=values, value_input_option="RAW")
+    return sh.url
+
+
+def cmd_contacts(args):
+    token, connected = _resolve_instance_token(args.instance_name)
+    if not connected:
+        # warn on stderr but still try (cached contacts may exist)
+        print(f"warning: instance '{args.instance_name}' is not connected — attempting anyway",
+              file=sys.stderr)
+
+    resp = api_request("GET", "/user/contacts", apikey_override=token)
+    raw_list = resp.get("data") if isinstance(resp, dict) else resp
+    rows = _normalize_contacts(raw_list if isinstance(raw_list, list) else [])
+
+    output = args.output or "stdout"
+    if output == "stdout":
+        print(json.dumps(rows, indent=2, ensure_ascii=False))
+        return
+
+    if output.startswith("csv:"):
+        target = output[len("csv:"):]
+        if not target:
+            print(json.dumps({"error": "csv: requires a path, e.g. csv:/tmp/out.csv"}))
+            sys.exit(1)
+        path = _write_contacts_csv(rows, target)
+        print(json.dumps({
+            "instance": args.instance_name,
+            "format": "csv",
+            "path": str(path),
+            "count": len(rows),
+        }, indent=2))
+        return
+
+    if output.startswith("gsheet:"):
+        title = output[len("gsheet:"):].strip()
+        if not title:
+            print(json.dumps({"error": "gsheet: requires a title, e.g. gsheet:\"My Sheet\""}))
+            sys.exit(1)
+        url = _write_contacts_gsheet(rows, title)
+        print(json.dumps({
+            "instance": args.instance_name,
+            "format": "gsheet",
+            "title": title,
+            "url": url,
+            "count": len(rows),
+        }, indent=2))
+        return
+
+    print(json.dumps({
+        "error": f"Unknown --output format: {output}",
+        "valid": ["stdout", "csv:PATH", "gsheet:TITLE"],
+    }))
+    sys.exit(1)
+
+
 # ── CLI Parser ───────────────────────────────────────────────────────
 
 def add_common_send_args(parser):
@@ -405,6 +570,12 @@ def main():
 
     p = sub.add_parser("summary", help="Overview of all instances with status")
     p.add_argument("--json", action="store_true")
+
+    # ── Contacts (instance-scoped) ──
+    p = sub.add_parser("contacts", help="List/export contacts from an instance")
+    p.add_argument("instance_name", help="Instance name (from `instances`)")
+    p.add_argument("--output", default="stdout",
+                   help="Output target: stdout (default JSON), csv:PATH, or gsheet:TITLE")
 
     # ── Send Messages ──
     p = sub.add_parser("send_text", help="Send text message")
@@ -507,6 +678,7 @@ def main():
         "delete_instance": cmd_delete_instance,
         "delete_proxy": cmd_delete_proxy,
         "summary": cmd_summary,
+        "contacts": cmd_contacts,
         "send_text": cmd_send_text,
         "send_media": cmd_send_media,
         "send_location": cmd_send_location,
