@@ -762,29 +762,14 @@ Rails.application.config.to_prepare do
   end
 
 # ===========================================================================
-# Bug 22 (v1) -- LabelConcern index+create render JSON 204->200 (PR #145)
+# Bug 22 -- REMOVIDO em rc6 upgrade (2026-07-06)
 # ---------------------------------------------------------------------------
-# LabelConcern#index and #create set @labels but have no view and no render
-# call, so Rails responds 204 No Content. Callers (manage_conversation_labels)
-# see empty body -> conclude 0 labels -> POST does update_labels (replace) ->
-# deletes ALL labels including atendimento_ia -> AI agent loses eligibility.
-# Fix: render json: { payload: @labels } in both actions.
+# rc6 upstream (PR #145 + EVO-1928) implementou o mesmo `render json:` E
+# refatorou #create pra chamar `incoming_label_tokens` (normaliza labelId,
+# label, title alem de labels[]), tratamento superior ao nosso patch.
+# Nosso module_eval sobrescreveria #create perdendo a normalizacao EVO-1928.
+# Trail analysis: workspace/development/features/rxp-4-fluxos-fix/[C]trail-rc6-diff-analysis.md
 # ===========================================================================
-  if defined?(LabelConcern)
-    LabelConcern.module_eval do
-      def index
-        @labels = model.label_list
-        render json: { payload: @labels }
-      end
-
-      def create
-        model.update_labels(resolve_label_titles(permitted_params[:labels]))
-        @labels = model.label_list
-        render json: { payload: @labels }
-      end
-    end
-    Rails.logger.info '[RXP_PATCH] LabelConcern#index+#create -- render JSON 204->200 (PR #145, bug 22)'
-  end
 
 # ===========================================================================
 # Bug 23 (v1) -- Conversations::FilterService assignee_type handler
@@ -952,10 +937,25 @@ Rails.application.config.to_prepare do
   end
 
   if defined?(ContactSerializer)
+    # rc6 upgrade (2026-07-06): rc6 upstream adicionou ContactPiiMasker no bloco
+    # de #serialize (ContactSerializer#serialize agora chama ContactPiiMasker.should_mask?).
+    # Nosso prepend chama super() que executa o corpo rc6. Se ContactPiiMasker
+    # nao estiver definido (feature flag off ou classe missing), super levanta
+    # NameError e explode nossos endpoints de pipeline_items#index.
+    # Guarda: rescue NameError -> loga warning e retorna hash minimal
+    # (id/name apenas) pra evitar 500. Melhor degradar do que quebrar UI.
     ContactSerializer.singleton_class.prepend(Module.new do
       def serialize(contact, include_labels: true, **options)
-        result = super(contact, include_labels: false, **options)
-        if include_labels
+        result = begin
+          super(contact, include_labels: false, **options)
+        rescue NameError => e
+          unless Thread.current[:rxp_pii_masker_warned]
+            Rails.logger.warn "[RXP_PATCH][bug25b] ContactSerializer super raised NameError: #{e.message}. Falling back to minimal hash."
+            Thread.current[:rxp_pii_masker_warned] = true
+          end
+          { 'id' => contact.id, 'name' => contact.name, 'type' => contact.try(:type) }.compact
+        end
+        if include_labels && result.is_a?(Hash)
           labels_by_title = Thread.current[:rxp_labels_by_title]
           result['labels'] = contact.labels.map do |tag|
             lbl = labels_by_title ? labels_by_title[tag.name] : Label.find_by(title: tag.name)
@@ -965,7 +965,7 @@ Rails.application.config.to_prepare do
         result
       end
     end)
-    Rails.logger.info '[RXP_PATCH] ContactSerializer -- labels_by_title thread-local (no Label.find_by per tag) (bug 25)'
+    Rails.logger.info '[RXP_PATCH] ContactSerializer -- labels_by_title thread-local (no Label.find_by per tag) (bug 25, rc6-safe)'
   end
 
   if defined?(PipelineItem)
@@ -1032,3 +1032,68 @@ end
 # Patch aplicado em: /opt/evocrm-patches/assets/ChatPage-BV93Mg_x.js
 # Backup em: ChatPage-BV93Mg_x.js.bak-bug27
 # ===========================================================================
+
+# ===========================================================================
+# Bug 28 (v2) -- WebhookListener nao recebe eventos Wisper contact_created/contact_updated
+# ---------------------------------------------------------------------------
+# Root cause: upstream comentou dispatch_update_event em app/models/contact.rb:78
+# ("Disabled - using Wisper events instead") mas nao registrou o WebhookListener
+# como subscriber global do bus Wisper. Resultado: publish(:contact_created) e
+# publish(:contact_updated) nunca chegam ao WebhookListener#contact_created/updated,
+# WebhookJob nunca eh enfileirado, POST para os webhooks account_type nao ocorre.
+#
+# Impacto observado: workflow n8n RXP_TAG_SYNC_CRM_MAUTIC (1M3eijJjn9HKYawS)
+# com 0 execucoes apesar de webhook 30c7f8bb valido no banco.
+#
+# Fix design: WebhookListener foi projetado pro AsyncDispatcher (event objects
+# Events::Base com .data). Wisper entrega Hash bruto {data: {...}}. Solucao:
+# adapter subscriber que converte Hash -> Events::Base e delega ao
+# WebhookListener singleton. Nao pode subscribir WebhookListener direto
+# (quebra com "undefined method 'data' for an instance of Hash").
+# Guard duplo: (a) evo_flow_style guard (return if data.respond_to?(:data))
+# alinhado com EvoFlow::ContactEventsListener; (b) nil-check contact/account
+# antes de delegar.
+# ===========================================================================
+module RxpPatches
+  class WebhookListenerWisperAdapter
+    def contact_created(data)
+      # Se ja for event object (AsyncDispatcher), ignora - AsyncDispatcher ja rota WebhookListener
+      return if data.respond_to?(:data)
+      dispatch_to_webhook_listener(:contact_created, data)
+    end
+
+    def contact_updated(data)
+      return if data.respond_to?(:data)
+      dispatch_to_webhook_listener(:contact_updated, data)
+    end
+
+    private
+
+    def dispatch_to_webhook_listener(event_name, data)
+      event_data = data.is_a?(Hash) ? (data[:data] || data) : nil
+      return log_missing(event_name, 'event_data') unless event_data.is_a?(Hash)
+      return log_missing(event_name, 'contact') unless event_data[:contact]
+
+      event_obj = Events::Base.new(event_name.to_s, Time.zone.now, event_data)
+      WebhookListener.instance.public_send(event_name, event_obj)
+    rescue StandardError => e
+      Rails.logger.error "[RXP_PATCH][bug28] WebhookListenerWisperAdapter##{event_name} failed: #{e.class}: #{e.message}"
+      Sentry.capture_exception(e) if defined?(Sentry)
+      nil
+    end
+
+    def log_missing(event_name, key)
+      Rails.logger.warn "[RXP_PATCH][bug28] WebhookListenerWisperAdapter##{event_name}: #{key} missing/invalid"
+      nil
+    end
+  end
+end
+
+Rails.application.config.after_initialize do
+  if defined?(WebhookListener) && defined?(Wisper) && defined?(Events::Base)
+    Wisper.subscribe(RxpPatches::WebhookListenerWisperAdapter.new)
+    Rails.logger.info '[RXP_PATCH] WebhookListenerWisperAdapter registered on Wisper bus (bug 28)'
+  else
+    Rails.logger.warn '[RXP_PATCH] Bug 28 skipped: WebhookListener/Wisper/Events::Base not all defined'
+  end
+end
