@@ -156,6 +156,15 @@ def register_websocket_proxy(sock) -> None:
         target = f"{TERMINAL_WS_BASE}/ws"
         try:
             upstream = create_connection(target, timeout=10)
+            # ``timeout`` above is a *connect* deadline, but websocket-client
+            # keeps it as the socket timeout for every subsequent recv(). The
+            # notifications channel (subscribe_global) is idle by design, so a
+            # 10s silence would raise WebSocketTimeoutException in the upstream
+            # pump below and tear the client WS down every ~10s (reconnect
+            # loop). Clear the timeout so idle recv() blocks instead of closing;
+            # real disconnects still surface via ConnectionClosed, and the
+            # client-side loop already tolerates idle the same way.
+            upstream.settimeout(None)
         except Exception as exc:
             log.warning("terminal_proxy: upstream WS connect failed: %s", exc)
             try:
